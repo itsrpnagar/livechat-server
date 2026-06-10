@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LiveChat Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3250;
+    --accent: #6c63ff;
+    --accent2: #a78bfa;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --msg-visitor: #22263a;
+    --msg-admin: #3730a3;
+  }
+
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+
+  /* ─ LOGIN ─ */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center; flex: 1;
+  }
+  .login-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 40px; width: 360px; text-align: center;
+  }
+  .login-box h1 { font-size: 22px; margin-bottom: 6px; }
+  .login-box p { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+  .login-box input {
+    width: 100%; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-size: 14px; margin-bottom: 14px;
+  }
+  .login-box input:focus { outline: none; border-color: var(--accent); }
+  .btn-primary {
+    width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none;
+    border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+  .error-msg { color: var(--red); font-size: 12px; margin-top: 10px; display: none; }
+
+  /* ─ APP ─ */
+  #app { display: none; flex: 1; overflow: hidden; }
+  .layout { display: flex; height: 100vh; }
+
+  /* ─ SIDEBAR ─ */
+  .sidebar {
+    width: 300px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo { font-size: 18px; font-weight: 700; color: var(--accent2); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-left: auto; }
+  .status-dot.offline { background: var(--muted); }
+
+  .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    flex: 1; padding: 10px; background: none; border: none; color: var(--muted);
+    font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all .2s; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .tab-btn.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+
+  .sessions-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .session-item {
+    padding: 12px 14px; border-radius: 10px; cursor: pointer; margin-bottom: 4px;
+    transition: background .15s; border: 1px solid transparent; position: relative;
+  }
+  .session-item:hover { background: var(--surface2); }
+  .session-item.active { background: var(--surface2); border-color: var(--accent); }
+  .session-item .s-name { font-size: 13px; font-weight: 600; }
+  .session-item .s-page { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-item .s-time { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .badge {
+    position: absolute; top: 10px; right: 12px; background: var(--accent);
+    color: #fff; border-radius: 10px; font-size: 10px; padding: 1px 7px; font-weight: 700;
+  }
+  .status-indicator {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    margin-right: 5px; vertical-align: middle;
+  }
+  .s-active { background: var(--green); }
+  .s-away { background: var(--yellow); }
+  .s-closed { background: var(--muted); }
+
+  .empty-state {
+    text-align: center; padding: 40px 20px; color: var(--muted);
+  }
+  .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
+  .empty-state p { font-size: 13px; }
+
+  /* ─ CHAT AREA ─ */
+  .chat-area {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .chat-header {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px; background: var(--surface);
+  }
+  .chat-header .visitor-name { font-weight: 600; font-size: 15px; }
+  .chat-header .visitor-page { font-size: 12px; color: var(--muted); }
+  .chat-header .btn-close {
+    margin-left: auto; padding: 6px 14px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 12px; cursor: pointer; transition: all .2s;
+  }
+  .chat-header .btn-close:hover { background: var(--red); border-color: var(--red); }
+
+  .messages {
+    flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg-row { display: flex; }
+  .msg-row.from-admin { justify-content: flex-end; }
+  .msg-bubble {
+    max-width: 68%; padding: 10px 14px; border-radius: 14px; font-size: 13px;
+    line-height: 1.5;
+  }
+  .from-visitor .msg-bubble { background: var(--msg-visitor); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .from-admin .msg-bubble { background: var(--msg-admin); border-bottom-right-radius: 4px; }
+  .msg-time { font-size: 10px; color: var(--muted); margin-top: 4px; text-align: right; }
+  .from-visitor .msg-time { text-align: left; }
+
+  .typing-indicator { color: var(--muted); font-size: 12px; font-style: italic; padding: 0 20px 8px; min-height: 24px; }
+
+  .input-area {
+    padding: 14px 16px; border-top: 1px solid var(--border); background: var(--surface);
+    display: flex; gap: 10px; align-items: flex-end;
+  }
+  .input-area textarea {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+    color: var(--text); font-size: 13px; padding: 10px 14px; resize: none; min-height: 42px;
+    max-height: 120px; font-family: inherit; line-height: 1.5;
+  }
+  .input-area textarea:focus { outline: none; border-color: var(--accent); }
+  .send-btn {
+    padding: 10px 18px; background: var(--accent); color: #fff; border: none;
+    border-radius: 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: opacity .2s; white-space: nowrap;
+  }
+  .send-btn:hover { opacity: 0.85; }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .no-chat {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; color: var(--muted);
+  }
+  .no-chat .icon { font-size: 48px; }
+  .no-chat p { font-size: 14px; }
+
+  /* ─ NOTIFICATION ─ */
+  .notif {
+    position: fixed; top: 16px; right: 16px; background: var(--accent);
+    color: #fff; padding: 12px 18px; border-radius: 10px; font-size: 13px;
+    font-weight: 600; z-index: 9999; display: none; animation: slideIn .3s ease;
+  }
+  @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>💬 LiveChat Admin</h1>
+    <p>Admin password enter karo</p>
+    <input type="password" id="admin-pass" placeholder="Admin Password" />
+    <button class="btn-primary" onclick="connect()">Connect</button>
+    <div class="error-msg" id="err-msg">❌ Wrong password ya server offline hai</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo">💬 LiveChat</span>
+        <div class="status-dot" id="admin-status-dot"></div>
+      </div>
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" onclick="filterSessions('active', this)">Active</button>
+        <button class="tab-btn" onclick="filterSessions('all', this)">All</button>
+        <button class="tab-btn" onclick="filterSessions('closed', this)">Closed</button>
+      </div>
+      <div class="sessions-list" id="sessions-list">
+        <div class="empty-state">
+          <div class="icon">🕐</div>
+          <p>Koi visitor abhi nahi hai<br/>Website pe widget lagao</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Area -->
+    <div class="chat-area" id="chat-area">
+      <div class="no-chat">
+        <div class="icon">💬</div>
+        <p>Kisi session pe click karo</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script>
+let socket;
+let sessions = {};
+let activeSessionId = null;
+let unread = {};
+let currentFilter = 'active';
+let typingTimer;
+
+function connect() {
+  // Server URL automatically current domain se detect hoga
+  const url = window.location.origin;
+  const pass = document.getElementById('admin-pass').value.trim();
+  if (!pass) return;
+
+  socket = io(url, { transports: ['websocket', 'polling'] });
+
+  socket.on('connect', () => {
+    socket.emit('admin:join', { password: pass });
+  });
+
+  socket.on('admin:auth_success', () => {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('admin-status-dot').classList.remove('offline');
+    localStorage.setItem('lc_pass', document.getElementById('admin-pass').value.trim());
+  });
+
+  socket.on('admin:auth_failed', () => {
+    document.getElementById('err-msg').style.display = 'block';
+  });
+
+  socket.on('connect_error', () => {
+    document.getElementById('err-msg').style.display = 'block';
+    document.getElementById('err-msg').textContent = '❌ Server se connect nahi ho paya';
+  });
+
+  socket.on('admin:all_sessions', (all) => {
+    all.forEach(s => sessions[s.id] = s);
+    renderSessions();
+  });
+
+  socket.on('admin:new_session', (session) => {
+    sessions[session.id] = session;
+    renderSessions();
+    showNotif(`🟢 New visitor: ${session.name}`);
+    playBeep();
+  });
+
+  socket.on('admin:message', ({ sessionId, msg }) => {
+    if (!sessions[sessionId]) return;
+    sessions[sessionId].messages = sessions[sessionId].messages || [];
+    sessions[sessionId].messages.push(msg);
+
+    if (activeSessionId === sessionId) {
+      appendMessage(msg);
+      clearTyping();
+    } else {
+      unread[sessionId] = (unread[sessionId] || 0) + 1;
+      renderSessions();
+      showNotif(`💬 ${sessions[sessionId].name}: ${msg.text.substring(0, 40)}`);
+      playBeep();
+    }
+  });
+
+  socket.on('admin:message_sent', ({ sessionId, msg }) => {
+    if (activeSessionId === sessionId) appendMessage(msg);
+  });
+
+  socket.on('admin:visitor_typing', ({ sessionId }) => {
+    if (activeSessionId === sessionId) {
+      document.getElementById('typing-ind').textContent = 'Visitor likh raha hai...';
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(clearTyping, 2000);
+    }
+  });
+
+  socket.on('admin:visitor_left', ({ sessionId }) => {
+    if (sessions[sessionId]) {
+      sessions[sessionId].status = 'away';
+      renderSessions();
+      if (activeSessionId === sessionId) updateChatHeader();
+    }
+  });
+
+  socket.on('admin:session_closed', ({ sessionId }) => {
+    if (sessions[sessionId]) sessions[sessionId].status = 'closed';
+    renderSessions();
+  });
+
+  socket.on('admin:session_detail', (session) => {
+    sessions[session.id] = session;
+    if (activeSessionId === session.id) renderMessages(session.messages);
+  });
+}
+
+// Auto-reconnect with saved creds
+window.onload = () => {
+  const pass = localStorage.getItem('lc_pass');
+  if (pass) {
+    document.getElementById('admin-pass').value = pass;
+  }
+};
+
+function filterSessions(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderSessions();
+}
+
+function renderSessions() {
+  const list = document.getElementById('sessions-list');
+  let filtered = Object.values(sessions);
+  if (currentFilter === 'active') filtered = filtered.filter(s => s.status === 'active' || s.status === 'away');
+  if (currentFilter === 'closed') filtered = filtered.filter(s => s.status === 'closed');
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">🕐</div><p>Koi session nahi</p></div>`;
+    return;
+  }
+
+  filtered.sort((a, b) => new Date(b.connectedAt) - new Date(a.connectedAt));
+
+  list.innerHTML = filtered.map(s => {
+    const dot = s.status === 'active' ? 's-active' : s.status === 'away' ? 's-away' : 's-closed';
+    const badge = unread[s.id] ? `<div class="badge">${unread[s.id]}</div>` : '';
+    const lastMsg = s.messages?.slice(-1)[0];
+    const preview = lastMsg ? lastMsg.text.substring(0, 35) + (lastMsg.text.length > 35 ? '...' : '') : s.page;
+    return `<div class="session-item ${activeSessionId === s.id ? 'active' : ''}" onclick="openSession('${s.id}')">
+      <div class="s-name"><span class="status-indicator ${dot}"></span>${escHtml(s.name)}</div>
+      <div class="s-page">${escHtml(preview)}</div>
+      <div class="s-time">${timeAgo(s.connectedAt)}</div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+function openSession(sessionId) {
+  activeSessionId = sessionId;
+  unread[sessionId] = 0;
+  renderSessions();
+
+  const session = sessions[sessionId];
+  const area = document.getElementById('chat-area');
+
+  area.innerHTML = `
+    <div class="chat-header" id="chat-header-${sessionId}">
+      <div>
+        <div class="visitor-name">${escHtml(session.name)}</div>
+        <div class="visitor-page">📄 ${escHtml(session.page || '/')}</div>
+      </div>
+      <button class="btn-close" onclick="closeSession('${sessionId}')">🔴 Close Chat</button>
+    </div>
+    <div class="messages" id="messages-box"></div>
+    <div class="typing-indicator" id="typing-ind"></div>
+    <div class="input-area">
+      <textarea id="reply-input" placeholder="Reply likho..." rows="1" onkeydown="handleKey(event)" oninput="adminTyping()"></textarea>
+      <button class="send-btn" onclick="sendReply()">Send ↑</button>
+    </div>
+  `;
+
+  if (session.messages?.length) {
+    renderMessages(session.messages);
+  } else {
+    socket.emit('admin:get_session', { sessionId });
+  }
+
+  document.getElementById('reply-input')?.focus();
+}
+
+function renderMessages(msgs) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  box.innerHTML = msgs.map(m => msgHTML(m)).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function appendMessage(msg) {
+  const box = document.getElementById('messages-box');
+  if (!box) return;
+  box.insertAdjacentHTML('beforeend', msgHTML(msg));
+  box.scrollTop = box.scrollHeight;
+}
+
+function msgHTML(msg) {
+  const t = new Date(msg.time).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' });
+  return `<div class="msg-row from-${msg.from}">
+    <div>
+      <div class="msg-bubble">${escHtml(msg.text)}</div>
+      <div class="msg-time">${t}</div>
+    </div>
+  </div>`;
+}
+
+function sendReply() {
+  const inp = document.getElementById('reply-input');
+  if (!inp || !inp.value.trim() || !activeSessionId) return;
+  socket.emit('admin:message', { sessionId: activeSessionId, text: inp.value.trim() });
+  inp.value = '';
+  inp.style.height = 'auto';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+}
+
+function adminTyping() {
+  if (activeSessionId) socket.emit('admin:typing', { sessionId: activeSessionId });
+  // Auto-resize textarea
+  const t = document.getElementById('reply-input');
+  t.style.height = 'auto';
+  t.style.height = Math.min(t.scrollHeight, 120) + 'px';
+}
+
+function clearTyping() {
+  const el = document.getElementById('typing-ind');
+  if (el) el.textContent = '';
+}
+
+function closeSession(sessionId) {
+  if (confirm('Is session ko close karna chahte ho?')) {
+    socket.emit('admin:close_session', { sessionId });
+  }
+}
+
+function showNotif(msg) {
+  const n = document.getElementById('notif');
+  n.textContent = msg;
+  n.style.display = 'block';
+  setTimeout(() => n.style.display = 'none', 3500);
+}
+
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; o.type = 'sine';
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    o.start(); o.stop(ctx.currentTime + 0.4);
+  } catch(e) {}
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  const diff = Math.floor((Date.now() - d) / 60000);
+  if (diff < 1) return 'Abhi';
+  if (diff < 60) return `${diff} min pehle`;
+  return d.toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' });
+}
+</script>
+</body>
+</html>
