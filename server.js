@@ -60,7 +60,7 @@ io.on("connection", (socket) => {
   });
 
   // ── VISITOR connects ─────────────────────────────────────────
-  socket.on("visitor:join", ({ sessionId, name, page }) => {
+  socket.on("visitor:join", ({ sessionId, name, page, referrer, device, utmSource, utmMedium, utmCampaign, gclid, userAgent }) => {
     let session = sessions[sessionId];
 
     if (!session) {
@@ -69,6 +69,12 @@ io.on("connection", (socket) => {
         id: sessionId || crypto.randomUUID(),
         name: name || "Visitor",
         page: page || "/",
+        referrer: referrer || "",
+        device: device || "Desktop",
+        utmSource: utmSource || "",
+        utmMedium: utmMedium || "",
+        utmCampaign: utmCampaign || "",
+        gclid: gclid || "",
         messages: [],
         status: "active",
         connectedAt: new Date().toISOString(),
