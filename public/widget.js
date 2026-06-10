@@ -16,6 +16,24 @@
   let socket = null, connected = false, typingTimer, isOpen = false, unreadCount = 0;
   const isMobile = () => window.innerWidth <= 768;
 
+  // ─── iOS keyboard fix ────────────────────────────────────────
+  // Widget height = visualViewport height (shrinks when keyboard opens)
+  function fixViewport() {
+    if (!isOpen || !isMobile()) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const w = document.getElementById('lc-widget');
+    if (!w) return;
+    w.style.top    = vv.offsetTop + 'px';
+    w.style.height = vv.height + 'px';
+    scrollBottom();
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fixViewport);
+    window.visualViewport.addEventListener('scroll', fixViewport);
+  }
+
   // ─── Socket ─────────────────────────────────────────────────
   function loadSocket(cb) {
     if (window.io) { cb(); return; }
@@ -287,7 +305,9 @@
   // ─── Scroll ─────────────────────────────────────────────────
   function scrollBottom() {
     const box = document.getElementById('lc-messages');
-    if (box) setTimeout(() => { box.scrollTop = box.scrollHeight; }, 60);
+    if (!box) return;
+    box.scrollTop = box.scrollHeight;
+    setTimeout(() => { box.scrollTop = box.scrollHeight; }, 100);
   }
 
   // ─── Toggle ─────────────────────────────────────────────────
@@ -303,16 +323,27 @@
         document.body.style.overflow = 'hidden';
         document.body.style.position = 'fixed';
         document.body.style.width = '100%';
+        // Set initial height from visualViewport
+        const vv = window.visualViewport;
+        if (vv) {
+          widget.style.top = vv.offsetTop + 'px';
+          widget.style.height = vv.height + 'px';
+        }
       }
-      btn.style.display = 'none'; // hide button when open on mobile
+      btn.style.display = 'none';
       unreadCount = 0;
       const badge = document.getElementById('lc-badge');
       if (badge) badge.style.display = 'none';
       scrollBottom();
-      setTimeout(() => document.getElementById('lc-input')?.focus(), 400);
+      setTimeout(() => {
+        document.getElementById('lc-input')?.focus();
+        scrollBottom();
+      }, 400);
       if (!socket) loadSocket(() => initSocket());
     } else {
       widget.style.display = 'none';
+      widget.style.top = '';
+      widget.style.height = '';
       if (isMobile()) {
         document.body.style.overflow = '';
         document.body.style.position = '';
