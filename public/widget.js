@@ -39,10 +39,37 @@
 
     socket.on('connect', () => {
       connected = true;
+
+      // ─── Device detect ───────────────────────────────────────
+      const ua = navigator.userAgent;
+      let device = 'Desktop';
+      if (/iPad|Tablet/i.test(ua)) device = 'Tablet';
+      else if (/iPhone|iPod/.test(ua)) device = 'iOS';
+      else if (/Android/.test(ua) && /Mobile/.test(ua)) device = 'Android';
+      else if (/Android/.test(ua)) device = 'Tablet';
+      else if (/Macintosh|MacIntel/.test(ua)) device = 'Mac';
+      else if (/Windows/.test(ua)) device = 'Windows';
+      else if (/Linux/.test(ua)) device = 'Linux';
+
+      // ─── Referral ────────────────────────────────────────────
+      const referrer = document.referrer || '';
+      const urlParams = new URLSearchParams(window.location.search);
+      const utmSource = urlParams.get('utm_source') || '';
+      const utmMedium = urlParams.get('utm_medium') || '';
+      const utmCampaign = urlParams.get('utm_campaign') || '';
+      const gclid = urlParams.get('gclid') || ''; // Google Ads click ID
+
       socket.emit('visitor:join', {
         sessionId,
         name: visitorName,
-        page: window.location.pathname,
+        page: window.location.href,
+        referrer,
+        device,
+        utmSource,
+        utmMedium,
+        utmCampaign,
+        gclid,
+        userAgent: ua,
       });
       setStatus('online');
     });
