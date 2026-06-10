@@ -53,8 +53,8 @@
 
   /* ─ SIDEBAR — 30% ─ */
   .sidebar {
-    width: 30%; background: var(--surface); border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; flex-shrink: 0; min-width: 220px; max-width: 320px;
+    flex: 0 0 30%; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
   }
   .sidebar-header {
     padding: 16px 20px; border-bottom: 1px solid var(--border);
@@ -102,10 +102,11 @@
 
   /* ─ CHAT AREA — 40% ─ */
   .chat-area {
-    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    flex: 0 0 40%; display: flex; flex-direction: column; overflow: hidden;
+    border-right: 1px solid var(--border);
   }
   .chat-main {
-    flex: 1; display: flex; overflow: hidden;
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
   }
   .chat-header {
     padding: 14px 20px; border-bottom: 1px solid var(--border);
@@ -146,8 +147,8 @@
 
   /* ─ VISITOR INFO PANEL — 30% ─ */
   .visitor-info {
-    width: 30%; min-width: 200px; max-width: 320px; background: var(--surface);
-    border-left: 1px solid var(--border); padding: 16px; overflow-y: auto; flex-shrink: 0;
+    flex: 0 0 30%; background: var(--surface);
+    border-left: 1px solid var(--border); padding: 16px; overflow-y: auto;
   }
   .visitor-info h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 12px; }
   .info-row { margin-bottom: 12px; }
@@ -242,6 +243,9 @@
         <p>Kisi session pe click karo</p>
       </div>
     </div>
+
+    <!-- Visitor Info Panel -->
+    <div class="visitor-info" id="visitor-info-panel" style="display:none"></div>
   </div>
 </div>
 
@@ -391,6 +395,7 @@ function openSession(sessionId) {
   renderSessions();
   const session = sessions[sessionId];
   const area = document.getElementById('chat-area');
+  const infoPanel = document.getElementById('visitor-info-panel');
 
   const deviceIcons = { iOS: '📱', Android: '📱', Mac: '🍎', Windows: '💻', Tablet: '📟', Desktop: '🖥️', Linux: '🖥️' };
   const deviceIcon = deviceIcons[session.device] || '🖥️';
@@ -407,6 +412,7 @@ function openSession(sessionId) {
     sourceBadge = `<div class="info-value" style="color:var(--muted)">Direct visit</div>`;
   }
 
+  // ── Chat area (40%) ──────────────────────────────────────────
   area.innerHTML = `
     <div class="chat-header">
       <div>
@@ -424,27 +430,30 @@ function openSession(sessionId) {
           <button class="send-btn" onclick="sendReply()">Send ↑</button>
         </div>
       </div>
-      <div class="visitor-info">
-        <h3>Visitor Info</h3>
-        <div class="info-row">
-          <div class="info-label">Device</div>
-          <div class="device-badge">${deviceIcon} ${escHtml(session.device || 'Desktop')}</div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Traffic Source</div>
-          ${sourceBadge}
-        </div>
-        ${session.utmCampaign ? `<div class="info-row"><div class="info-label">Campaign</div><div class="info-value">${escHtml(session.utmCampaign)}</div></div>` : ''}
-        <div class="info-row">
-          <div class="info-label">Landing Page</div>
-          <div class="info-value" style="font-size:11px">${escHtml(session.page || '/')}</div>
-        </div>
-        ${session.referrer ? `<div class="info-row"><div class="info-label">Referrer</div><div class="info-value" style="font-size:11px">${escHtml(session.referrer)}</div></div>` : ''}
-        <div class="info-row">
-          <div class="info-label">Connected At</div>
-          <div class="info-value">${new Date(session.connectedAt).toLocaleTimeString('hi-IN', {hour:'2-digit', minute:'2-digit'})}</div>
-        </div>
-      </div>
+    </div>
+  `;
+
+  // ── Visitor info panel (30%) ─────────────────────────────────
+  infoPanel.style.display = 'block';
+  infoPanel.innerHTML = `
+    <h3>Visitor Info</h3>
+    <div class="info-row">
+      <div class="info-label">Device</div>
+      <div class="device-badge">${deviceIcon} ${escHtml(session.device || 'Desktop')}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Traffic Source</div>
+      ${sourceBadge}
+    </div>
+    ${session.utmCampaign ? `<div class="info-row"><div class="info-label">Campaign</div><div class="info-value">${escHtml(session.utmCampaign)}</div></div>` : ''}
+    <div class="info-row">
+      <div class="info-label">Landing Page</div>
+      <div class="info-value" style="font-size:11px">${escHtml(session.page || '/')}</div>
+    </div>
+    ${session.referrer ? `<div class="info-row"><div class="info-label">Referrer</div><div class="info-value" style="font-size:11px">${escHtml(session.referrer)}</div></div>` : ''}
+    <div class="info-row">
+      <div class="info-label">Connected At</div>
+      <div class="info-value">${new Date(session.connectedAt).toLocaleTimeString('hi-IN', {hour:'2-digit', minute:'2-digit'})}</div>
     </div>
   `;
 
@@ -510,6 +519,7 @@ function clearTyping() {
 function closeSession(sessionId) {
   if (confirm('Is session ko close karna chahte ho?')) {
     socket.emit('admin:close_session', { sessionId });
+    document.getElementById('visitor-info-panel').style.display = 'none';
   }
 }
 
