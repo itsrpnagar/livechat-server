@@ -1,17 +1,14 @@
 /**
  * LiveChat Widget
- * Apni website pe paste karo — bas SERVER_URL change karo
+ * Apni website pe paste karo
  * 
  * Usage:
- *   <script src="widget.js" data-server="https://your-app.railway.app"><\/script>
- * 
- * Ya directly:
- *   window.LiveChatConfig = { server: 'https://your-app.railway.app', name: 'Support' };
+ *   window.LiveChatConfig = { server: 'https://api.satradiozone.online', name: 'Support' };
  */
 (function () {
   // ─── CONFIG ──────────────────────────────────────────────────
   const scriptTag = document.currentScript;
-  const SERVER_URL = (window.LiveChatConfig?.server) || scriptTag?.getAttribute('data-server') || 'https://your-app.railway.app';
+  const SERVER_URL = (window.LiveChatConfig?.server) || scriptTag?.getAttribute('data-server') || 'https://api.satradiozone.online';
   const BOT_NAME   = (window.LiveChatConfig?.name) || scriptTag?.getAttribute('data-name') || 'Support';
   const THEME      = (window.LiveChatConfig?.color) || scriptTag?.getAttribute('data-color') || '#6c63ff';
 
