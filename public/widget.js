@@ -17,14 +17,15 @@
   const isMobile = () => window.innerWidth <= 768;
 
   // ─── iOS keyboard fix ────────────────────────────────────────
-  // Widget height = visualViewport height (shrinks when keyboard opens)
   function fixViewport() {
     if (!isOpen || !isMobile()) return;
     const vv = window.visualViewport;
-    if (!vv) return;
     const w = document.getElementById('lc-widget');
-    if (!w) return;
-    w.style.top    = vv.offsetTop + 'px';
+    if (!vv || !w) return;
+    // Position widget exactly within the visible viewport
+    w.style.top    = vv.pageTop + 'px';
+    w.style.left   = vv.pageLeft + 'px';
+    w.style.width  = vv.width + 'px';
     w.style.height = vv.height + 'px';
     scrollBottom();
   }
@@ -124,9 +125,9 @@
         position: fixed !important;
         top: 0 !important; left: 0 !important;
         right: 0 !important; bottom: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        height: -webkit-fill-available !important;
+        width: 100% !important;
+        height: 100% !important;
+        height: 100dvh !important;
         border-radius: 0 !important;
         box-shadow: none !important;
       }
@@ -323,10 +324,12 @@
         document.body.style.overflow = 'hidden';
         document.body.style.position = 'fixed';
         document.body.style.width = '100%';
-        // Set initial height from visualViewport
+        // Apply immediately
         const vv = window.visualViewport;
         if (vv) {
-          widget.style.top = vv.offsetTop + 'px';
+          widget.style.top    = vv.pageTop + 'px';
+          widget.style.left   = vv.pageLeft + 'px';
+          widget.style.width  = vv.width + 'px';
           widget.style.height = vv.height + 'px';
         }
       }
