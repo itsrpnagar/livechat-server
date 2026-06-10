@@ -105,9 +105,6 @@ io.on("connection", (socket) => {
     };
     session.messages.push(msg);
 
-    // Echo back to visitor
-    socket.emit("chat:message", msg);
-
     // Forward to admin
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:message", { sessionId, msg });
