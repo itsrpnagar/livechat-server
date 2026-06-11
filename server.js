@@ -279,20 +279,21 @@ io.on("connection", (socket) => {
     // Update socket ID
     session.visitorSocketId = socket.id;
     session.status = "away";
+    session._refreshed = true;  // Mark refreshed on session
     socket.sessionId = sid;
 
     socket.emit("visitor:restore_ok", { sessionId: sid });
 
-    // Re-emit visitor to admin panel so it shows up again
+    // Re-emit visitor to admin — keep alerted status as-is
     if (adminSocketId) {
       const vData = activeVisitorData.get(deviceId);
       if (vData) {
-        vData.socketId = socket.id;
-        vData.alerted  = false; // reset alert so Reconnect button shows
+        vData.socketId = socket.id; // Update socket ID only
+        // DO NOT reset alerted — keep it as is
         activeVisitorData.set(deviceId, vData);
         io.to(adminSocketId).emit("admin:visitor_update", vData);
       }
-      // Also notify admin to show Reconnect button on session
+      // Notify admin to show Reconnect button
       io.to(adminSocketId).emit("admin:visitor_refreshed", {
         sessionId: sid,
         deviceId,
