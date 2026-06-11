@@ -75,6 +75,9 @@
   .btn-alert.sent { background: var(--green); color: #000; cursor: not-allowed; }
   .btn-reconnect { margin-top: 6px; width: 100%; padding: 5px; background: #f59e0b; border: none; border-radius: 6px; color: #000; font-size: 11px; font-weight: 700; cursor: pointer; }
   .btn-reconnect:hover { background: #d97706; }
+  .btn-reconnect-feed { width: 100%; padding: 8px; background: #f59e0b; border: none; border-radius: 8px; color: #000; font-size: 12px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+  .btn-reconnect-feed:hover { background: #d97706; }
+  .btn-reconnect-feed.sent { background: var(--green); color: #000; cursor: not-allowed; }
   .status-indicator { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .s-active { background: var(--green); } .s-away { background: var(--yellow); } .s-closed { background: var(--muted); }
   .empty-state { text-align: center; padding: 40px 16px; color: var(--muted); }
@@ -357,7 +360,8 @@ function connect() {
       sessions[sessionId].status = 'away';
       sessions[sessionId]._refreshed = true;
       renderSessions();
-      showNotif('🔄 Visitor refreshed page — click Reconnect');
+      renderVisitorFeed();
+      showNotif('🔄 Visitor refreshed — click Reconnect Chat');
       playBeep();
     }
   });
@@ -414,21 +418,29 @@ function renderVisitorFeed() {
   feed.innerHTML = list.map(v => {
     const isBlocked = v.isBot || v.isDesktop || v.isDatacenter;
     let badgeHtml = '';
-    if (v.isBot)        badgeHtml = '<span class="vc-badge bot">🤖 BOT</span>';
-    else if (v.isDesktop)   badgeHtml = '<span class="vc-badge desktop">💻 Desktop</span>';
+    if (v.isBot)             badgeHtml = '<span class="vc-badge bot">🤖 BOT</span>';
+    else if (v.isDesktop)    badgeHtml = '<span class="vc-badge desktop">💻 Desktop</span>';
     else if (v.isDatacenter) badgeHtml = '<span class="vc-badge datacenter">🔒 Datacenter</span>';
-    else                badgeHtml = '<span class="vc-badge residential">✅ Residential</span>';
+    else                     badgeHtml = '<span class="vc-badge residential">✅ Residential</span>';
+
+    const ipTypeColor = v.isDatacenter ? 'color:var(--red)' : 'color:var(--green)';
+
+    // Check if this visitor has a refreshed session
+    const refreshedSession = Object.values(sessions).find(s =>
+      s._refreshed && s.visitorSocketId === v.socketId
+    );
 
     let btnHtml = '';
-    if (isBlocked) {
+    if (refreshedSession) {
+      // Show Reconnect button — visitor refreshed page
+      btnHtml = `<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed('${refreshedSession.id}', this)">🔄 Reconnect Chat</button>`;
+    } else if (isBlocked) {
       btnHtml = `<button class="btn-alert blocked" disabled>Blocked</button>`;
     } else if (v.alerted) {
       btnHtml = `<button class="btn-alert sent" disabled>Alert Sent ✔</button>`;
     } else {
       btnHtml = `<button class="btn-alert enabled" onclick="sendAlert('${v.socketId}','${v.deviceId}',this)">🔔 Send Alert</button>`;
     }
-
-    const ipTypeColor = v.isDatacenter ? 'color:var(--red)' : 'color:var(--green)';
 
     return `<div class="visitor-card">
       <div class="vc-top">
@@ -442,6 +454,18 @@ function renderVisitorFeed() {
       ${btnHtml}
     </div>`;
   }).join('');
+}
+
+function reconnectVisitorFromFeed(sessionId, btn) {
+  if (!socket) return;
+  socket.emit('admin:reconnect_visitor', { sessionId });
+  if (sessions[sessionId]) {
+    sessions[sessionId]._refreshed = false;
+  }
+  btn.textContent = '✅ Reconnected';
+  btn.disabled = true;
+  btn.className = 'btn-reconnect-feed sent';
+  renderSessions();
 }
 
 function reconnectVisitor(sessionId, e) {
