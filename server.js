@@ -205,26 +205,27 @@ io.on("connection", (socket) => {
 
   // ── Service selected → start chat ────────────────────────────
   socket.on("visitor:service_selected", ({ service, sessionId: sid }) => {
-    let session = sessions[sid];
-    if (!session) {
-      session = {
-        id: sid, name: "Visitor",
-        page: socket.handshake.query.page || "/",
-        referrer: "", device: isDesktop ? "Desktop" : parser.getDevice().type || "Mobile",
-        utmSource: "", utmMedium: "", utmCampaign: "", gclid: "",
-        messages: [], status: "active",
-        connectedAt: new Date().toISOString(),
-        visitorSocketId: socket.id,
-        service, _reconnectable: false,
-      };
-      sessions[sid] = session;
+    // Prevent duplicate session creation
+    if (sessions[sid]) {
+      socket.sessionId = sid;
+      sessions[sid].visitorSocketId = socket.id;
+      sessions[sid].status = "active";
+      socket.emit("visitor:session", { sessionId: sid });
+      return;
     }
+    const session = {
+      id: sid, name: "Visitor",
+      page: socket.handshake.query.page || "/",
+      referrer: "", device: isDesktop ? "Desktop" : parser.getDevice().type || "Mobile",
+      utmSource: "", utmMedium: "", utmCampaign: "", gclid: "",
+      messages: [], status: "active",
+      connectedAt: new Date().toISOString(),
+      visitorSocketId: socket.id,
+      service, _reconnectable: false,
+    };
+    sessions[sid] = session;
     socket.sessionId = sid;
     socket.emit("visitor:session", { sessionId: sid });
-    const greeting = `Hi! I see you need help with "${service}". A live agent will be with you shortly.`;
-    const msg = { id: crypto.randomUUID(), from: "admin", text: greeting, time: new Date().toISOString() };
-    session.messages.push(msg);
-    socket.emit("chat:message", msg);
     stats.chatsStarted++;
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:new_session", session);
