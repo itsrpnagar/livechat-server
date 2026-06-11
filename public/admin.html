@@ -422,22 +422,15 @@ function renderVisitorFeed() {
     else                     badgeHtml = '<span class="vc-badge residential">✅ Residential</span>';
     const ipTypeColor = v.isDatacenter ? 'color:var(--red)' : 'color:var(--green)';
 
-    // Find reconnectable session by _deviceId
-    const reconnectSession = v.reconnectSessionId
-      ? sessions[v.reconnectSessionId]
-      : Object.values(sessions).find(function(s) {
-          return s._reconnectable === true && s._deviceId === v.deviceId;
-        });
+    const reconnectSession = Object.values(sessions).find(function(s) {
+      return s._reconnectable === true && s._deviceId === v.deviceId;
+    });
 
     let btnHtml = '';
     if (isBlocked) {
       btnHtml = '<button class="btn-alert blocked" disabled>Blocked</button>';
     } else if (reconnectSession) {
-      // Has session — restore history or fresh based on messages
-      btnHtml = '<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed(\'' + reconnectSession.id + '\',\'' + v.deviceId + '\', this)">🔄 Reconnect Chat</button>';
-    } else if (v.bouncedAlert) {
-      // Alerted but bounced without selecting service — fresh reconnect
-      btnHtml = '<button class="btn-reconnect-feed" onclick="reconnectFreshVisitor(\'' + v.socketId + '\',\'' + v.deviceId + '\', this)">🔄 Reconnect Chat</button>';
+      btnHtml = '<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed(\'' + reconnectSession.id + '\', this)">🔄 Reconnect Chat</button>';
     } else if (v.alerted) {
       btnHtml = '<button class="btn-alert sent" disabled>Alert Sent ✔</button>';
     } else {
@@ -458,26 +451,14 @@ function renderVisitorFeed() {
   }).join('');
 }
 
-function reconnectVisitorFromFeed(sessionId, deviceId, btn) {
+function reconnectVisitorFromFeed(sessionId, btn) {
   if (!socket) return;
-  socket.emit('admin:reconnect_visitor', { sessionId, deviceId });
-  if (sessions[sessionId]) {
-    sessions[sessionId]._reconnectable = false;
-  }
+  socket.emit('admin:reconnect_visitor', { sessionId });
+  if (sessions[sessionId]) { sessions[sessionId]._reconnectable = false; }
   btn.textContent = '✅ Reconnected';
   btn.disabled = true;
   btn.className = 'btn-reconnect-feed sent';
   renderSessions();
-}
-
-function reconnectFreshVisitor(socketId, deviceId, btn) {
-  // Visitor was alerted but bounced without chat — send fresh service card again
-  if (!socket) return;
-  socket.emit('admin:send_alert', { targetSocketId: socketId, deviceId });
-  btn.textContent = 'Alert Sent ✔';
-  btn.disabled = true;
-  btn.className = 'btn-alert sent';
-  if (visitors[deviceId]) { visitors[deviceId].bouncedAlert = false; visitors[deviceId].alerted = true; }
 }
 
 function reconnectVisitor(sessionId, e) {
