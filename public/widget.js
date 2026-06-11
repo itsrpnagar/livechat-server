@@ -1,7 +1,7 @@
 /**
  * LiveChat Widget v1.0
  * Industry standard pattern — same as Intercom, Crisp, Tawk.to
- * Safe for Google Ads — no eval, no base64, no obfuscation, no redirects
+
  */
 (function (w, d) {
   'use strict';
@@ -179,39 +179,55 @@
   style.textContent = css;
   d.head.appendChild(style);
 
-  // ─── Build DOM ───────────────────────────────────────────────
+  // ─── Build Button ────────────────────────────────────────────
   var btn = d.createElement('button');
   btn.id = 'lc-btn';
   btn.setAttribute('aria-label', 'Open live chat');
-  btn.innerHTML = '💬<span id="lc-badge" aria-hidden="true"></span>';
+  var btnIcon  = d.createTextNode('💬');
+  var btnBadge = d.createElement('span');
+  btnBadge.id = 'lc-badge';
+  btnBadge.setAttribute('aria-hidden', 'true');
+  btn.appendChild(btnIcon);
+  btn.appendChild(btnBadge);
   d.body.appendChild(btn);
 
+  // ─── Build Widget ────────────────────────────────────────────
   var widget = d.createElement('div');
   widget.id = 'lc-widget';
   widget.setAttribute('role', 'dialog');
   widget.setAttribute('aria-label', 'Live chat support');
-  widget.innerHTML = [
-    '<div id="lc-header">',
-    '  <div id="lc-avatar" aria-hidden="true">👋</div>',
-    '  <div class="lc-info">',
-    '    <div class="lc-title">' + BOT_NAME + '</div>',
-    '    <div class="lc-sub">',
-    '      <span class="lc-dot" id="lc-dot" aria-hidden="true"></span>',
-    '      <span id="lc-status-text">Online</span>',
-    '    </div>',
-    '  </div>',
-    '  <button id="lc-close-btn" aria-label="Close chat">&#x2715;</button>',
-    '</div>',
-    '<div id="lc-messages" role="log" aria-live="polite" aria-label="Chat messages">',
-    '  <div class="lc-msg from-admin">Hi! 👋 How can we help you today?</div>',
-    '</div>',
-    '<div id="lc-typing" aria-live="polite"></div>',
-    '<div id="lc-footer">',
-    '  <textarea id="lc-input" placeholder="Type your message..." rows="1"',
-    '    autocomplete="off" spellcheck="true" aria-label="Type a message"></textarea>',
-    '  <button id="lc-send" aria-label="Send message">&#x2191;</button>',
-    '</div>'
-  ].join('');
+
+  // Header
+  var header  = d.createElement('div'); header.id = 'lc-header';
+  var avatar  = d.createElement('div'); avatar.id = 'lc-avatar'; avatar.setAttribute('aria-hidden','true'); avatar.textContent = '👋';
+  var info    = d.createElement('div'); info.className = 'lc-info';
+  var title   = d.createElement('div'); title.className = 'lc-title'; title.textContent = BOT_NAME;
+  var sub     = d.createElement('div'); sub.className = 'lc-sub';
+  var dot     = d.createElement('span'); dot.className = 'lc-dot'; dot.id = 'lc-dot'; dot.setAttribute('aria-hidden','true');
+  var statusTxt = d.createElement('span'); statusTxt.id = 'lc-status-text'; statusTxt.textContent = 'Online';
+  sub.appendChild(dot); sub.appendChild(statusTxt);
+  info.appendChild(title); info.appendChild(sub);
+  var closeBtn = d.createElement('button'); closeBtn.id = 'lc-close-btn'; closeBtn.setAttribute('aria-label','Close chat'); closeBtn.textContent = '\u2715';
+  header.appendChild(avatar); header.appendChild(info); header.appendChild(closeBtn);
+
+  // Messages
+  var messages = d.createElement('div'); messages.id = 'lc-messages'; messages.setAttribute('role','log'); messages.setAttribute('aria-live','polite'); messages.setAttribute('aria-label','Chat messages');
+  var greet = d.createElement('div'); greet.className = 'lc-msg from-admin'; greet.textContent = 'Hi! \uD83D\uDC4B How can we help you today?';
+  messages.appendChild(greet);
+
+  // Typing
+  var typing = d.createElement('div'); typing.id = 'lc-typing'; typing.setAttribute('aria-live','polite');
+
+  // Footer
+  var footer  = d.createElement('div'); footer.id = 'lc-footer';
+  var input   = d.createElement('textarea'); input.id = 'lc-input'; input.placeholder = 'Type your message...'; input.rows = 1; input.setAttribute('autocomplete','off'); input.setAttribute('spellcheck','true'); input.setAttribute('aria-label','Type a message');
+  var sendBtn = d.createElement('button'); sendBtn.id = 'lc-send'; sendBtn.setAttribute('aria-label','Send message'); sendBtn.textContent = '\u2191';
+  footer.appendChild(input); footer.appendChild(sendBtn);
+
+  widget.appendChild(header);
+  widget.appendChild(messages);
+  widget.appendChild(typing);
+  widget.appendChild(footer);
   d.body.appendChild(widget);
 
   // ─── Viewport fix (iOS keyboard) ─────────────────────────────
