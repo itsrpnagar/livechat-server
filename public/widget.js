@@ -37,43 +37,28 @@
 
   // ─── Init Socket ─────────────────────────────────────────────
   function initSocket() {
+    // Reuse existing socket from ui-metrics.js if available
+    if (w._lcSocket && w._lcSocket.connected) {
+      socket = w._lcSocket;
+      connected = true;
+      setStatus('online');
+      attachSocketListeners();
+      return;
+    }
+
     socket = w.io(SERVER, { transports: ['websocket', 'polling'] });
+    w._lcSocket = socket;
 
     socket.on('connect', function () {
       connected = true;
-
-      // ── Try restore if active session exists ──
-      if (hasActiveSession && sessionId) {
-        socket.emit('visitor:restore', { sessionId: sessionId });
-        return;
-      }
-
-      var ua = navigator.userAgent;
-      var device = 'Desktop';
-      if (/iPhone|iPod/.test(ua))                        device = 'iOS';
-      else if (/iPad/.test(ua))                          device = 'Tablet';
-      else if (/Android/.test(ua) && /Mobile/.test(ua)) device = 'Android';
-      else if (/Android/.test(ua))                       device = 'Tablet';
-      else if (/Macintosh/.test(ua))                     device = 'Mac';
-      else if (/Windows/.test(ua))                       device = 'Windows';
-
-      var p = new URLSearchParams(w.location.search);
-      socket.emit('visitor:join', {
-        sessionId   : sessionId,
-        name        : 'Visitor',
-        page        : w.location.href,
-        referrer    : d.referrer || '',
-        device      : device,
-        userAgent   : ua,
-        utmSource   : p.get('utm_source')   || '',
-        utmMedium   : p.get('utm_medium')   || '',
-        utmCampaign : p.get('utm_campaign') || '',
-        gclid       : p.get('gclid')        || ''
-      });
       setStatus('online');
     });
 
-    // ── Restore OK — session kept silently ──
+    attachSocketListeners();
+  }
+
+  function attachSocketListeners() {
+    // ── Restore OK ──
     socket.on('visitor:restore_ok', function (data) {
       sessionId = data.sessionId;
       localStorage.setItem('lc_sid', sessionId);
@@ -84,21 +69,6 @@
     socket.on('visitor:restore_failed', function () {
       localStorage.removeItem('lc_active');
       hasActiveSession = false;
-      var ua = navigator.userAgent;
-      var device = 'Desktop';
-      if (/iPhone|iPod/.test(ua)) device = 'iOS';
-      else if (/iPad/.test(ua)) device = 'Tablet';
-      else if (/Android/.test(ua) && /Mobile/.test(ua)) device = 'Android';
-      var p = new URLSearchParams(w.location.search);
-      socket.emit('visitor:join', {
-        sessionId: sessionId, name: 'Visitor',
-        page: w.location.href, referrer: d.referrer || '',
-        device: device, userAgent: ua,
-        utmSource: p.get('utm_source') || '',
-        utmMedium: p.get('utm_medium') || '',
-        utmCampaign: p.get('utm_campaign') || '',
-        gclid: p.get('gclid') || ''
-      });
       setStatus('online');
     });
 
