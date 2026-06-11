@@ -34,6 +34,7 @@ const activeSockets     = new Map(); // socketId → deviceId
 const deviceConnections = new Map(); // deviceId → count
 const activeVisitorData = new Map(); // deviceId → visitorData
 const alertedDevices    = new Set();
+const bouncedAlerts     = new Map(); // deviceId → { deviceId, alertedAt }
 
 let stats = { activeVisitors: 0, alertsSent: 0, chatsStarted: 0 };
 
@@ -132,12 +133,14 @@ io.on("connection", (socket) => {
       socket.emit("admin:message_sent", { sessionId, msg });
     });
 
-    socket.on("admin:reconnect_visitor", ({ sessionId }) => {
+    socket.on("admin:reconnect_visitor", ({ sessionId, deviceId: dId }) => {
       const session = sessions[sessionId];
       if (!session || !session.visitorSocketId) return;
       io.to(session.visitorSocketId).emit("chat:reopen", { sessionId, messages: session.messages });
       session.status = "active";
       session._reconnectable = false;
+      session._alertedButBounced = false;
+      if (dId) bouncedAlerts.delete(dId);
       socket.emit("admin:session_reconnected", { sessionId });
     });
 
@@ -175,16 +178,33 @@ io.on("connection", (socket) => {
     const flag = countryCode
       ? countryCode.toUpperCase().replace(/./g, c => String.fromCodePoint(c.charCodeAt(0) + 127397))
       : "🌐";
+
+    // Check if visitor has a reconnectable session (bounced with chat or alert)
+    const reconnectSession = Object.values(sessions).find(s =>
+      s._deviceId === deviceId && s._reconnectable === true
+    );
+
+    // Check if visitor was alerted but bounced without chat
+    const bouncedAlert = bouncedAlerts.get(deviceId);
+
     const visitorData = {
-      socketId: socket.id, deviceId,
-      os: parser.getOS().name || "Unknown",
-      browser: parser.getBrowser().name || "Unknown",
-      isp: ispName, isDatacenter, isBot, isDesktop, flag,
-      country: countryCode || "",
-      alerted: alertedDevices.has(deviceId),
-      page: socket.handshake.query.page || "/",
+      socketId:    socket.id,
+      deviceId,
+      os:          parser.getOS().name      || "Unknown",
+      browser:     parser.getBrowser().name || "Unknown",
+      isp:         ispName,
+      isDatacenter,
+      isBot,
+      isDesktop,
+      flag,
+      country:     countryCode || "",
+      alerted:     alertedDevices.has(deviceId),
+      page:        socket.handshake.query.page || "/",
       connectedAt: new Date().toISOString(),
+      reconnectSessionId: reconnectSession ? reconnectSession.id : null,
+      bouncedAlert: bouncedAlert ? true : false,
     };
+
     activeVisitorData.set(deviceId, visitorData);
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:visitor_update", visitorData);
@@ -311,6 +331,23 @@ io.on("connection", (socket) => {
       if (count <= 0) {
         deviceConnections.delete(dId);
         activeVisitorData.delete(dId);
+
+        // If visitor was alerted but bounced without chatting — mark session
+        if (alertedDevices.has(dId)) {
+          const alertedSession = Object.values(sessions).find(s =>
+            s._deviceId === dId && s.status !== "closed"
+          );
+          if (alertedSession) {
+            // Has chat history — keep _reconnectable
+            alertedSession._reconnectable = true;
+            alertedSession._alertedButBounced = true;
+          } else {
+            // Was alerted but no session created — mark deviceId
+            bouncedAlerts.set(dId, { deviceId: dId, alertedAt: Date.now() });
+          }
+          alertedDevices.delete(dId); // Clear so fresh logic can work
+        }
+
         if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_disconnect", dId);
       } else {
         deviceConnections.set(dId, count);
