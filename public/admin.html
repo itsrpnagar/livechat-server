@@ -372,13 +372,15 @@ function connect() {
     showNotif('⚠️ Visitor closed chat — Reconnect available');
   });
 
-  // ── Visitor refreshed page ──
+  // ── Visitor refreshed page — just update socket, NO reconnect button ──
   socket.on('admin:visitor_refreshed', ({ sessionId, deviceId }) => {
-    if (sessions[sessionId]) { sessions[sessionId].status = 'away'; sessions[sessionId]._reconnectable = true; }
+    if (sessions[sessionId]) {
+      sessions[sessionId].status = 'away';
+      sessions[sessionId]._reconnectable = false;
+    }
     renderSessions();
     renderVisitorFeed();
-    showNotif('🔄 Visitor refreshed — Reconnect available');
-    playBeep();
+    showNotif('🔄 Visitor refreshed page');
   });
 
   // ── Session reconnected ──
