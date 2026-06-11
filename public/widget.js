@@ -240,6 +240,24 @@
     setTimeout(function () { box.scrollTop = box.scrollHeight; }, 200);
   }
 
+  // ─── Public API: called from ui-metrics after service selected ──
+  w.lcInitChat = function (service, newSessionId) {
+    if (newSessionId) {
+      sessionId = newSessionId;
+      localStorage.setItem('lc_sid', newSessionId);
+    }
+    toggleWidget(true);
+    function tryEmit() {
+      if (socket && connected) {
+        socket.emit('visitor:service_selected', { service: service, sessionId: sessionId });
+      } else {
+        setTimeout(tryEmit, 300);
+      }
+    }
+    if (!socket) { loadSocket(function () { initSocket(); setTimeout(tryEmit, 600); }); }
+    else { tryEmit(); }
+  };
+
   // ─── Open / Close ─────────────────────────────────────────────
   btn.onclick = function () { toggleWidget(); };
   d.getElementById('lc-close-btn').onclick = function () { toggleWidget(false); };
