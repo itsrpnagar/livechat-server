@@ -73,35 +73,11 @@
       setStatus('online');
     });
 
-    // ── Session kept after refresh — wait for admin reconnect ──
+    // ── Restore OK — session kept silently ──
     socket.on('visitor:restore_ok', function (data) {
       sessionId = data.sessionId;
       localStorage.setItem('lc_sid', sessionId);
       setStatus('online');
-      // Chat stays closed — admin will reopen it
-    });
-
-    // ── Admin reconnected visitor — reopen chat ──
-    socket.on('chat:reopen', function (data) {
-      sessionId = data.sessionId;
-      localStorage.setItem('lc_sid', sessionId);
-      localStorage.setItem('lc_active', '1');
-      hasActiveSession = true;
-      setStatus('online');
-
-      // Open chat window
-      toggleWidget(true);
-
-      // Restore message history
-      if (data.messages && data.messages.length) {
-        var box = d.getElementById('lc-messages');
-        if (box) {
-          while (box.firstChild) box.removeChild(box.firstChild);
-          for (var i = 0; i < data.messages.length; i++) {
-            appendMsg(data.messages[i].text, data.messages[i].from);
-          }
-        }
-      }
     });
 
     // ── Restore failed — fresh start ──
@@ -316,6 +292,35 @@
     setTimeout(function () { box.scrollTop = box.scrollHeight; }, 80);
     setTimeout(function () { box.scrollTop = box.scrollHeight; }, 200);
   }
+
+  // ─── Public API: reopen chat after admin reconnects ──────────
+  w.lcReopenChat = function (data) {
+    if (data.sessionId) {
+      sessionId = data.sessionId;
+      localStorage.setItem('lc_sid', data.sessionId);
+    }
+    localStorage.setItem('lc_active', '1');
+    hasActiveSession = true;
+    toggleWidget(true);
+
+    // Restore message history
+    if (data.messages && data.messages.length) {
+      var box = d.getElementById('lc-messages');
+      if (box) {
+        while (box.firstChild) box.removeChild(box.firstChild);
+        for (var i = 0; i < data.messages.length; i++) {
+          appendMsg(data.messages[i].text, data.messages[i].from);
+        }
+      }
+    }
+
+    // Connect socket if not connected
+    if (!socket) {
+      loadSocket(function () {
+        initSocket();
+      });
+    }
+  };
 
   // ─── Public API: called from ui-metrics after service selected ──
   w.lcInitChat = function (service, newSessionId) {
