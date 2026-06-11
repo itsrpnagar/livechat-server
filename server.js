@@ -205,7 +205,6 @@ io.on("connection", (socket) => {
 
   // ── Service selected → start chat ────────────────────────────
   socket.on("visitor:service_selected", ({ service, sessionId: sid }) => {
-    // Prevent duplicate
     if (sessions[sid]) {
       socket.sessionId = sid;
       sessions[sid].visitorSocketId = socket.id;
@@ -213,26 +212,23 @@ io.on("connection", (socket) => {
       socket.emit("visitor:session", { sessionId: sid });
       return;
     }
+    const greeting = `Hi! I see you need help with "${service}". A live agent will be with you shortly.`;
+    const msg = { id: crypto.randomUUID(), from: "admin", text: greeting, time: new Date().toISOString() };
     const session = {
       id: sid, name: "Visitor",
       page: socket.handshake.query.page || "/",
       referrer: "", device: isDesktop ? "Desktop" : parser.getDevice().type || "Mobile",
       utmSource: "", utmMedium: "", utmCampaign: "", gclid: "",
-      messages: [], status: "active",
+      messages: [msg], status: "active",
       connectedAt: new Date().toISOString(),
       visitorSocketId: socket.id,
       service, _reconnectable: false,
+      _deviceId: deviceId,
     };
     sessions[sid] = session;
     socket.sessionId = sid;
     socket.emit("visitor:session", { sessionId: sid });
-
-    // Single greeting message
-    const greeting = `Hi! I see you need help with "${service}". A live agent will be with you shortly.`;
-    const msg = { id: crypto.randomUUID(), from: "admin", text: greeting, time: new Date().toISOString() };
-    session.messages.push(msg);
-    socket.emit("chat:message", msg); // to visitor
-
+    socket.emit("chat:message", msg);
     stats.chatsStarted++;
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:new_session", session);
@@ -250,6 +246,7 @@ io.on("connection", (socket) => {
     session.visitorSocketId = socket.id;
     session.status = "away";
     session._reconnectable = true;
+    session._deviceId = deviceId;
     socket.sessionId = sid;
     socket.emit("visitor:restore_ok", { sessionId: sid });
 
@@ -270,6 +267,7 @@ io.on("connection", (socket) => {
     if (session) {
       session.status = "away";
       session._reconnectable = true;
+      session._deviceId = deviceId;
     }
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:visitor_closed_chat", { sessionId: sid, deviceId });
