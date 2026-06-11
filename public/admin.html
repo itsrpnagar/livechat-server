@@ -336,6 +336,32 @@ function connect() {
   socket.on('admin:visitor_left',   ({ sessionId }) => { if (sessions[sessionId]) { sessions[sessionId].status = 'away'; renderSessions(); } });
   socket.on('admin:session_closed', ({ sessionId }) => { if (sessions[sessionId]) sessions[sessionId].status = 'closed'; renderSessions(); });
   socket.on('admin:session_detail', (session) => { sessions[session.id] = session; if (activeSessionId === session.id) renderMessages(session.messages); });
+
+  // ── Visitor closed chat window ──
+  socket.on('admin:visitor_closed_chat', ({ sessionId }) => {
+    if (sessions[sessionId]) {
+      sessions[sessionId].status = 'away';
+      renderSessions();
+      if (activeSessionId === sessionId) {
+        showNotif('⚠️ Visitor closed the chat window');
+        var typingEl = document.getElementById('typing-ind');
+        if (typingEl) typingEl.textContent = 'Visitor closed chat window';
+      }
+    }
+  });
+
+  // ── Visitor reconnected after refresh ──
+  socket.on('admin:visitor_reconnected', ({ sessionId }) => {
+    if (sessions[sessionId]) {
+      sessions[sessionId].status = 'active';
+      renderSessions();
+      if (activeSessionId === sessionId) {
+        showNotif('🟢 Visitor reconnected');
+        var typingEl = document.getElementById('typing-ind');
+        if (typingEl) typingEl.textContent = '';
+      }
+    }
+  });
 }
 
 window.onload = () => {
