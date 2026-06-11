@@ -300,14 +300,25 @@ function connect() {
   });
 
   socket.on('admin:visitor_update', (v) => {
+    // Preserve chatStatus if already set
+    var existing = visitors[v.deviceId];
+    if (existing && existing.chatStatus) {
+      v.chatStatus = existing.chatStatus;
+    }
     visitors[v.deviceId] = v;
     renderVisitorFeed();
-    if (!v.isBot && !v.isDesktop && !v.isDatacenter) playBeep();
+    // Beep only for new human mobile residential visitors
+    if (!existing && !v.isBot && !v.isDesktop && !v.isDatacenter) {
+      showNotif('🟢 New visitor: ' + v.flag + ' ' + v.os);
+      playBeep();
+    }
   });
 
   socket.on('admin:visitor_disconnect', (deviceId) => {
-    delete visitors[deviceId];
-    renderVisitorFeed();
+    // Server will send bounced event after 3s — just update stats for now
+    if (visitors[deviceId]) {
+      visitors[deviceId].chatStatus = 'disconnected';
+    }
   });
 
   socket.on('admin:alert_sent', ({ deviceId }) => {
@@ -329,7 +340,6 @@ function connect() {
 
   // ── Chat Sessions ──
   socket.on('admin:all_sessions',   (all) => { all.forEach(s => sessions[s.id] = s); renderSessions(); });
-  socket.on('admin:new_session',    (session) => { sessions[session.id] = session; renderSessions(); showNotif(`💬 New chat: ${session.service || session.name}`); playBeep(); if (currentTab !== 'visitors') switchToTab('active'); });
 
   socket.on('admin:message', ({ sessionId, msg }) => {
     if (!sessions[sessionId]) return;
@@ -351,47 +361,86 @@ function connect() {
   socket.on('admin:session_detail', (session) => { sessions[session.id] = session; if (activeSessionId === session.id) renderMessages(session.messages); });
 
   // ── Visitor closed chat window ──
-  socket.on('admin:visitor_closed_chat', ({ sessionId }) => {
+  socket.on('admin:visitor_closed_chat', ({ sessionId, deviceId }) => {
     if (sessions[sessionId]) {
       sessions[sessionId].status = 'away';
-      renderSessions();
-      if (activeSessionId === sessionId) {
-        showNotif('⚠️ Visitor closed the chat window');
-        var typingEl = document.getElementById('typing-ind');
-        if (typingEl) typingEl.textContent = 'Visitor closed chat window';
-      }
+      sessions[sessionId]._reconnectable = true;
+    }
+    if (visitors[deviceId]) {
+      visitors[deviceId].chatStatus = 'reconnectable';
+    }
+    renderVisitorFeed();
+    renderSessions();
+    showNotif('⚠️ Visitor closed chat — Reconnect available');
+    if (activeSessionId === sessionId) {
+      var typingEl = document.getElementById('typing-ind');
+      if (typingEl) typingEl.textContent = 'Visitor closed chat window';
     }
   });
 
-  // ── Visitor refreshed page — show Reconnect button ──
+  // ── Visitor refreshed page ──
   socket.on('admin:visitor_refreshed', ({ sessionId, deviceId }) => {
     if (sessions[sessionId]) {
       sessions[sessionId].status = 'away';
-      sessions[sessionId]._refreshed = true;
-      renderSessions();
-      renderVisitorFeed();
-      showNotif('🔄 Visitor refreshed — click Reconnect Chat');
-      playBeep();
+      sessions[sessionId]._reconnectable = true;
     }
+    if (visitors[deviceId]) {
+      visitors[deviceId].chatStatus = 'reconnectable';
+    }
+    renderVisitorFeed();
+    renderSessions();
+    showNotif('🔄 Visitor refreshed — Reconnect available');
+    playBeep();
+  });
+
+  // ── Visitor bounced (left website) ──
+  socket.on('admin:visitor_bounced', ({ deviceId }) => {
+    // Grey out card first
+    var card = document.getElementById('vc-' + deviceId);
+    if (card) {
+      card.style.opacity = '0.4';
+      card.style.transition = 'opacity 0.5s';
+    }
+    showNotif('🔴 Visitor left the website');
+    // Remove after 4 seconds
+    setTimeout(function() {
+      delete visitors[deviceId];
+      renderVisitorFeed();
+    }, 4000);
   });
 
   // ── Session reconnected ──
   socket.on('admin:session_reconnected', ({ sessionId }) => {
     if (sessions[sessionId]) {
       sessions[sessionId].status = 'active';
-      sessions[sessionId]._refreshed = false;
-      renderSessions();
-      renderVisitorFeed();
-      showNotif('🟢 Visitor reconnected');
+      sessions[sessionId]._reconnectable = false;
     }
+    // Find visitor and update chatStatus
+    Object.keys(visitors).forEach(function(did) {
+      var s = sessions[sessionId];
+      if (s && visitors[did] && visitors[did].socketId === s.visitorSocketId) {
+        visitors[did].chatStatus = 'chatting';
+      }
+    });
+    renderVisitorFeed();
+    renderSessions();
+    showNotif('🟢 Visitor reconnected — chat active');
   });
 
-  // ── Visitor reconnected ──
-  socket.on('admin:visitor_reconnected', ({ sessionId }) => {
-    if (sessions[sessionId]) {
-      sessions[sessionId].status = 'active';
-      renderSessions();
-    }
+  // ── Visitor new session (chat started) ──
+  socket.on('admin:new_session', function(session) {
+    sessions[session.id] = session;
+    // Mark visitor as chatting
+    Object.keys(visitors).forEach(function(did) {
+      if (visitors[did].socketId === session.visitorSocketId) {
+        visitors[did].chatStatus = 'chatting';
+      }
+    });
+    renderSessions();
+    renderVisitorFeed();
+    showNotif('💬 New chat: ' + (session.service || session.name));
+    playBeep();
+    if (currentTab !== 'visitors') switchToTab('active');
   });
 }
 
@@ -427,6 +476,7 @@ function renderVisitorFeed() {
 
   feed.innerHTML = list.map(v => {
     const isBlocked = v.isBot || v.isDesktop || v.isDatacenter;
+
     let badgeHtml = '';
     if (v.isBot)             badgeHtml = '<span class="vc-badge bot">🤖 BOT</span>';
     else if (v.isDesktop)    badgeHtml = '<span class="vc-badge desktop">💻 Desktop</span>';
@@ -435,33 +485,40 @@ function renderVisitorFeed() {
 
     const ipTypeColor = v.isDatacenter ? 'color:var(--red)' : 'color:var(--green)';
 
-    // Check if this visitor has a refreshed session — match by socketId
-    const refreshedSession = Object.values(sessions).find(function(s) {
-      return s._refreshed === true && s.visitorSocketId === v.socketId;
+    // Find reconnectable session for this visitor
+    const reconnectableSession = Object.values(sessions).find(function(s) {
+      return s._reconnectable === true && s.visitorSocketId === v.socketId;
     });
 
     let btnHtml = '';
-    if (refreshedSession) {
-      btnHtml = `<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed('${refreshedSession.id}', this)">🔄 Reconnect Chat</button>`;
-    } else if (isBlocked) {
-      btnHtml = `<button class="btn-alert blocked" disabled>Blocked</button>`;
+    if (isBlocked) {
+      // Bot / Desktop / Datacenter — always blocked
+      btnHtml = '<button class="btn-alert blocked" disabled>Blocked</button>';
+    } else if (v.chatStatus === 'chatting') {
+      // Actively chatting — no button
+      btnHtml = '<button class="btn-alert sent" disabled>💬 Chatting</button>';
+    } else if (reconnectableSession) {
+      // Visitor refreshed or closed chat — show Reconnect
+      btnHtml = '<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed(\'' + reconnectableSession.id + '\', this)">🔄 Reconnect Chat</button>';
     } else if (v.alerted) {
-      btnHtml = `<button class="btn-alert sent" disabled>Alert Sent ✔</button>`;
+      // Alert sent, waiting for service selection
+      btnHtml = '<button class="btn-alert sent" disabled>Alert Sent ✔</button>';
     } else {
-      btnHtml = `<button class="btn-alert enabled" onclick="sendAlert('${v.socketId}','${v.deviceId}',this)">🔔 Send Alert</button>`;
+      // Fresh visitor — show Send Alert
+      btnHtml = '<button class="btn-alert enabled" onclick="sendAlert(\'' + v.socketId + '\',\'' + v.deviceId + '\',this)">🔔 Send Alert</button>';
     }
 
-    return `<div class="visitor-card">
-      <div class="vc-top">
-        <span class="vc-flag">${v.flag || '🌐'}</span>
-        <div class="vc-info">
-          <div class="vc-device">${escHtml(v.os)} · ${escHtml(v.browser)} ${badgeHtml}</div>
-          <div class="vc-isp" style="${ipTypeColor}">${escHtml(v.isp || 'Loading...')}</div>
-        </div>
-      </div>
-      <div class="vc-page">📄 ${escHtml(v.page || '/')}</div>
-      ${btnHtml}
-    </div>`;
+    return '<div class="visitor-card" id="vc-' + v.deviceId + '">' +
+      '<div class="vc-top">' +
+        '<span class="vc-flag">' + (v.flag || '🌐') + '</span>' +
+        '<div class="vc-info">' +
+          '<div class="vc-device">' + escHtml(v.os) + ' · ' + escHtml(v.browser) + ' ' + badgeHtml + '</div>' +
+          '<div class="vc-isp" style="' + ipTypeColor + '">' + escHtml(v.isp || 'Loading...') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="vc-page">📄 ' + escHtml(v.page || '/') + '</div>' +
+      btnHtml +
+    '</div>';
   }).join('');
 }
 
