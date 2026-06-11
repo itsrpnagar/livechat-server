@@ -134,6 +134,12 @@ io.on("connection", (socket) => {
       socket.emit("admin:session_reconnected", { sessionId });
     });
 
+    // ── Reset alert — remove from alertedDevices so Send Alert re-enables ──
+    socket.on("admin:reset_alert", ({ deviceId }) => {
+      alertedDevices.delete(deviceId);
+      socket.emit("admin:alert_reset", { deviceId });
+    });
+
     socket.on("admin:get_session",   ({ sessionId }) => { const s = sessions[sessionId]; if (s) socket.emit("admin:session_detail", s); });
     socket.on("admin:close_session", ({ sessionId }) => {
       const s = sessions[sessionId];
