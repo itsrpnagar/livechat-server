@@ -453,6 +453,8 @@ function reconnectVisitor(sessionId, e) {
     renderSessions();
   }
 }
+
+function sendAlert(socketId, deviceId, btn) {
   if (!socket || btn.disabled) return;
   socket.emit('admin:send_alert', { targetSocketId: socketId, deviceId });
   btn.className   = 'btn-alert sent';
