@@ -73,7 +73,8 @@
   .btn-alert.enabled { background: var(--accent); color: #fff; }
   .btn-alert.enabled:hover { opacity: 0.85; }
   .btn-alert.sent { background: var(--green); color: #000; cursor: not-allowed; }
-  .btn-alert.blocked { background: var(--surface); color: var(--muted); border: 1px solid var(--border); cursor: not-allowed; }
+  .btn-reconnect { margin-top: 6px; width: 100%; padding: 5px; background: #f59e0b; border: none; border-radius: 6px; color: #000; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .btn-reconnect:hover { background: #d97706; }
   .status-indicator { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .s-active { background: var(--green); } .s-away { background: var(--yellow); } .s-closed { background: var(--muted); }
   .empty-state { text-align: center; padding: 40px 16px; color: var(--muted); }
@@ -350,16 +351,32 @@ function connect() {
     }
   });
 
-  // ── Visitor reconnected after refresh ──
+  // ── Visitor refreshed page — show Reconnect button ──
+  socket.on('admin:visitor_refreshed', ({ sessionId, deviceId }) => {
+    if (sessions[sessionId]) {
+      sessions[sessionId].status = 'away';
+      sessions[sessionId]._refreshed = true;
+      renderSessions();
+      showNotif('🔄 Visitor refreshed page — click Reconnect');
+      playBeep();
+    }
+  });
+
+  // ── Session reconnected ──
+  socket.on('admin:session_reconnected', ({ sessionId }) => {
+    if (sessions[sessionId]) {
+      sessions[sessionId].status = 'active';
+      sessions[sessionId]._refreshed = false;
+      renderSessions();
+      showNotif('🟢 Visitor reconnected');
+    }
+  });
+
+  // ── Visitor reconnected ──
   socket.on('admin:visitor_reconnected', ({ sessionId }) => {
     if (sessions[sessionId]) {
       sessions[sessionId].status = 'active';
       renderSessions();
-      if (activeSessionId === sessionId) {
-        showNotif('🟢 Visitor reconnected');
-        var typingEl = document.getElementById('typing-ind');
-        if (typingEl) typingEl.textContent = '';
-      }
     }
   });
 }
@@ -427,7 +444,15 @@ function renderVisitorFeed() {
   }).join('');
 }
 
-function sendAlert(socketId, deviceId, btn) {
+function reconnectVisitor(sessionId, e) {
+  e.stopPropagation();
+  if (!socket) return;
+  socket.emit('admin:reconnect_visitor', { sessionId });
+  if (sessions[sessionId]) {
+    sessions[sessionId]._refreshed = false;
+    renderSessions();
+  }
+}
   if (!socket || btn.disabled) return;
   socket.emit('admin:send_alert', { targetSocketId: socketId, deviceId });
   btn.className   = 'btn-alert sent';
@@ -448,10 +473,14 @@ function renderSessions() {
     const badge = unread[s.id] ? `<div class="badge">${unread[s.id]}</div>` : '';
     const lastMsg = s.messages?.slice(-1)[0];
     const preview = lastMsg ? lastMsg.text.substring(0, 28) + (lastMsg.text.length > 28 ? '...' : '') : (s.service || s.device || '');
+    const reconnectBtn = s._refreshed
+      ? `<button class="btn-reconnect" onclick="reconnectVisitor('${s.id}', event)">🔄 Reconnect</button>`
+      : '';
     return `<div class="session-item ${activeSessionId === s.id ? 'active' : ''}" onclick="openSession('${s.id}')">
       <div class="s-name"><span class="status-indicator ${dot}"></span>${escHtml(s.name)}</div>
       <div class="s-page">${escHtml(s.service ? '🎯 ' + s.service : preview)}</div>
       <div class="s-time">${timeAgo(s.connectedAt)}</div>
+      ${reconnectBtn}
       ${badge}
     </div>`;
   }).join('');
