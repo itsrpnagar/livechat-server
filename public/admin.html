@@ -48,6 +48,32 @@
   .session-item .s-page { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .session-item .s-time { font-size: 10px; color: var(--muted); margin-top: 3px; }
   .badge { position: absolute; top: 8px; right: 10px; background: var(--accent); color: #fff; border-radius: 10px; font-size: 10px; padding: 1px 6px; font-weight: 700; }
+
+  /* STATS BAR */
+  .stats-bar { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .stat-pill { flex: 1; background: var(--surface2); border-radius: 8px; padding: 6px 8px; text-align: center; }
+  .stat-pill .sp-num { font-size: 16px; font-weight: 700; color: var(--text); }
+  .stat-pill .sp-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
+
+  /* VISITOR FEED */
+  .visitor-feed { flex: 1; overflow-y: auto; padding: 8px; }
+  .visitor-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; }
+  .vc-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .vc-flag { font-size: 16px; }
+  .vc-info { flex: 1; min-width: 0; }
+  .vc-device { font-size: 12px; font-weight: 600; color: var(--text); }
+  .vc-isp { font-size: 10px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vc-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+  .vc-badge.bot { background: var(--red); color: #fff; }
+  .vc-badge.desktop { background: #f59e0b; color: #000; }
+  .vc-badge.datacenter { background: var(--muted); color: #fff; }
+  .vc-badge.residential { background: var(--green); color: #000; }
+  .vc-page { font-size: 10px; color: var(--muted); margin-bottom: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .btn-alert { width: 100%; padding: 7px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .2s; }
+  .btn-alert.enabled { background: var(--accent); color: #fff; }
+  .btn-alert.enabled:hover { opacity: 0.85; }
+  .btn-alert.sent { background: var(--green); color: #000; cursor: not-allowed; }
+  .btn-alert.blocked { background: var(--surface); color: var(--muted); border: 1px solid var(--border); cursor: not-allowed; }
   .status-indicator { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .s-active { background: var(--green); } .s-away { background: var(--yellow); } .s-closed { background: var(--muted); }
   .empty-state { text-align: center; padding: 40px 16px; color: var(--muted); }
@@ -160,13 +186,29 @@
         <button class="btn-history" onclick="openHistory()">📁 History</button>
         <div class="status-dot" id="admin-status-dot"></div>
       </div>
-      <div class="sidebar-tabs">
-        <button class="tab-btn active" onclick="filterSessions('active', this)">Active</button>
-        <button class="tab-btn" onclick="filterSessions('all', this)">All</button>
-        <button class="tab-btn" onclick="filterSessions('closed', this)">Closed</button>
+
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-pill"><div class="sp-num" id="stat-visitors">0</div><div class="sp-lbl">Visitors</div></div>
+        <div class="stat-pill"><div class="sp-num" id="stat-alerts">0</div><div class="sp-lbl">Alerts</div></div>
+        <div class="stat-pill"><div class="sp-num" id="stat-chats">0</div><div class="sp-lbl">Chats</div></div>
       </div>
-      <div class="sessions-list" id="sessions-list">
-        <div class="empty-state"><div class="icon">🕐</div><p>No visitors yet.</p></div>
+
+      <!-- Tabs -->
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" onclick="switchTab('visitors', this)">Visitors</button>
+        <button class="tab-btn" onclick="switchTab('active', this)">Active</button>
+        <button class="tab-btn" onclick="switchTab('closed', this)">Closed</button>
+      </div>
+
+      <!-- Visitor Feed -->
+      <div class="visitor-feed" id="visitor-feed">
+        <div class="empty-state"><div class="icon">🕐</div><p>Waiting for visitors...</p></div>
+      </div>
+
+      <!-- Sessions List (hidden by default) -->
+      <div class="sessions-list" id="sessions-list" style="display:none">
+        <div class="empty-state"><div class="icon">🕐</div><p>No sessions yet</p></div>
       </div>
     </div>
 
@@ -216,16 +258,19 @@
 <div class="notif" id="notif"></div>
 
 <script>
-let socket, sessions = {}, activeSessionId = null, unread = {}, currentFilter = 'active', typingTimer;
+let socket, sessions = {}, visitors = {}, activeSessionId = null, unread = {}, currentTab = 'visitors', typingTimer;
 let saveTargetSessionId = null;
 
 function connect() {
-  const url = window.location.origin;
+  const url      = window.location.origin;
   const username = document.getElementById('admin-user').value.trim();
-  const pass = document.getElementById('admin-pass').value.trim();
+  const pass     = document.getElementById('admin-pass').value.trim();
   if (!username || !pass) return;
-  socket = io(url, { transports: ['websocket', 'polling'] });
+
+  socket = io(url, { query: { role: 'admin' }, transports: ['websocket', 'polling'] });
+
   socket.on('connect', () => socket.emit('admin:join', { username, password: pass }));
+
   socket.on('admin:auth_success', () => {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -233,10 +278,46 @@ function connect() {
     localStorage.setItem('lc_user', username);
     localStorage.setItem('lc_pass', pass);
   });
-  socket.on('admin:auth_failed', () => { document.getElementById('err-msg').style.display = 'block'; });
+
+  socket.on('admin:auth_failed',  () => { document.getElementById('err-msg').style.display = 'block'; });
   socket.on('connect_error', () => { document.getElementById('err-msg').style.display = 'block'; document.getElementById('err-msg').textContent = '❌ Could not connect to server'; });
-  socket.on('admin:all_sessions', (all) => { all.forEach(s => sessions[s.id] = s); renderSessions(); });
-  socket.on('admin:new_session', (session) => { sessions[session.id] = session; renderSessions(); showNotif(`🟢 New visitor: ${session.name}`); playBeep(); });
+
+  // ── Stats ──
+  socket.on('update_stats', (data) => {
+    document.getElementById('stat-visitors').textContent = data.activeVisitors || 0;
+    document.getElementById('stat-alerts').textContent   = data.alertsSent    || 0;
+    document.getElementById('stat-chats').textContent    = data.chatsStarted  || 0;
+  });
+
+  // ── Visitor Feed ──
+  socket.on('admin:all_visitors', (all) => {
+    all.forEach(v => visitors[v.deviceId] = v);
+    renderVisitorFeed();
+  });
+
+  socket.on('admin:visitor_update', (v) => {
+    visitors[v.deviceId] = v;
+    renderVisitorFeed();
+    if (!v.isBot && !v.isDesktop && !v.isDatacenter) playBeep();
+  });
+
+  socket.on('admin:visitor_disconnect', (deviceId) => {
+    delete visitors[deviceId];
+    renderVisitorFeed();
+  });
+
+  socket.on('admin:alert_sent', ({ deviceId }) => {
+    if (visitors[deviceId]) { visitors[deviceId].alerted = true; renderVisitorFeed(); }
+  });
+
+  socket.on('admin:popup_dismissed', ({ deviceId }) => {
+    if (visitors[deviceId]) { visitors[deviceId].alerted = false; renderVisitorFeed(); }
+  });
+
+  // ── Chat Sessions ──
+  socket.on('admin:all_sessions',   (all) => { all.forEach(s => sessions[s.id] = s); renderSessions(); });
+  socket.on('admin:new_session',    (session) => { sessions[session.id] = session; renderSessions(); showNotif(`💬 New chat: ${session.service || session.name}`); playBeep(); if (currentTab !== 'visitors') switchToTab('active'); });
+
   socket.on('admin:message', ({ sessionId, msg }) => {
     if (!sessions[sessionId]) return;
     sessions[sessionId].messages = sessions[sessionId].messages || [];
@@ -244,16 +325,15 @@ function connect() {
     if (activeSessionId === sessionId) { appendMessage(msg); clearTyping(); }
     else { unread[sessionId] = (unread[sessionId] || 0) + 1; renderSessions(); showNotif(`💬 ${sessions[sessionId].name}: ${msg.text.substring(0, 40)}`); playBeep(); }
   });
-  socket.on('admin:message_sent', ({ sessionId, msg }) => { if (activeSessionId === sessionId) appendMessage(msg); });
+
+  socket.on('admin:message_sent',   ({ sessionId, msg }) => { if (activeSessionId === sessionId) appendMessage(msg); });
   socket.on('admin:visitor_typing', ({ sessionId }) => {
     if (activeSessionId === sessionId) {
-      const el = document.getElementById('typing-ind');
-      if (el) el.textContent = 'Visitor is typing...';
-      clearTimeout(typingTimer);
-      typingTimer = setTimeout(clearTyping, 2000);
+      const el = document.getElementById('typing-ind'); if (el) el.textContent = 'Visitor is typing...';
+      clearTimeout(typingTimer); typingTimer = setTimeout(clearTyping, 2000);
     }
   });
-  socket.on('admin:visitor_left', ({ sessionId }) => { if (sessions[sessionId]) { sessions[sessionId].status = 'away'; renderSessions(); } });
+  socket.on('admin:visitor_left',   ({ sessionId }) => { if (sessions[sessionId]) { sessions[sessionId].status = 'away'; renderSessions(); } });
   socket.on('admin:session_closed', ({ sessionId }) => { if (sessions[sessionId]) sessions[sessionId].status = 'closed'; renderSessions(); });
   socket.on('admin:session_detail', (session) => { sessions[session.id] = session; if (activeSessionId === session.id) renderMessages(session.messages); });
 }
@@ -265,28 +345,86 @@ window.onload = () => {
   if (pass) document.getElementById('admin-pass').value = pass;
 };
 
-function filterSessions(filter, btn) {
-  currentFilter = filter;
+// ── Tab switching ────────────────────────────────────────────────
+function switchTab(tab, btn) {
+  currentTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderSessions();
+  if (btn) btn.classList.add('active');
+  document.getElementById('visitor-feed').style.display  = tab === 'visitors' ? 'block' : 'none';
+  document.getElementById('sessions-list').style.display = tab !== 'visitors' ? 'block' : 'none';
+  if (tab !== 'visitors') renderSessions();
+}
+
+function switchToTab(tab) {
+  const btns = document.querySelectorAll('.tab-btn');
+  const tabs = ['visitors', 'active', 'closed'];
+  const idx  = tabs.indexOf(tab);
+  if (idx >= 0) switchTab(tab, btns[idx]);
+}
+
+// ── Visitor Feed ─────────────────────────────────────────────────
+function renderVisitorFeed() {
+  const feed = document.getElementById('visitor-feed');
+  const list = Object.values(visitors);
+  if (!list.length) { feed.innerHTML = '<div class="empty-state"><div class="icon">🕐</div><p>Waiting for visitors...</p></div>'; return; }
+
+  feed.innerHTML = list.map(v => {
+    const isBlocked = v.isBot || v.isDesktop || v.isDatacenter;
+    let badgeHtml = '';
+    if (v.isBot)        badgeHtml = '<span class="vc-badge bot">🤖 BOT</span>';
+    else if (v.isDesktop)   badgeHtml = '<span class="vc-badge desktop">💻 Desktop</span>';
+    else if (v.isDatacenter) badgeHtml = '<span class="vc-badge datacenter">🔒 Datacenter</span>';
+    else                badgeHtml = '<span class="vc-badge residential">✅ Residential</span>';
+
+    let btnHtml = '';
+    if (isBlocked) {
+      btnHtml = `<button class="btn-alert blocked" disabled>Blocked</button>`;
+    } else if (v.alerted) {
+      btnHtml = `<button class="btn-alert sent" disabled>Alert Sent ✔</button>`;
+    } else {
+      btnHtml = `<button class="btn-alert enabled" onclick="sendAlert('${v.socketId}','${v.deviceId}',this)">🔔 Send Alert</button>`;
+    }
+
+    const ipTypeColor = v.isDatacenter ? 'color:var(--red)' : 'color:var(--green)';
+
+    return `<div class="visitor-card">
+      <div class="vc-top">
+        <span class="vc-flag">${v.flag || '🌐'}</span>
+        <div class="vc-info">
+          <div class="vc-device">${escHtml(v.os)} · ${escHtml(v.browser)} ${badgeHtml}</div>
+          <div class="vc-isp" style="${ipTypeColor}">${escHtml(v.isp || 'Loading...')}</div>
+        </div>
+      </div>
+      <div class="vc-page">📄 ${escHtml(v.page || '/')}</div>
+      ${btnHtml}
+    </div>`;
+  }).join('');
+}
+
+function sendAlert(socketId, deviceId, btn) {
+  if (!socket || btn.disabled) return;
+  socket.emit('admin:send_alert', { targetSocketId: socketId, deviceId });
+  btn.className   = 'btn-alert sent';
+  btn.textContent = 'Alert Sent ✔';
+  btn.disabled    = true;
 }
 
 function renderSessions() {
   const list = document.getElementById('sessions-list');
+  if (!list) return;
   let filtered = Object.values(sessions);
-  if (currentFilter === 'active') filtered = filtered.filter(s => s.status === 'active' || s.status === 'away');
-  if (currentFilter === 'closed') filtered = filtered.filter(s => s.status === 'closed');
+  if (currentTab === 'active')  filtered = filtered.filter(s => s.status === 'active' || s.status === 'away');
+  if (currentTab === 'closed')  filtered = filtered.filter(s => s.status === 'closed');
   if (!filtered.length) { list.innerHTML = `<div class="empty-state"><div class="icon">🕐</div><p>No sessions yet</p></div>`; return; }
   filtered.sort((a, b) => new Date(b.connectedAt) - new Date(a.connectedAt));
   list.innerHTML = filtered.map(s => {
     const dot = s.status === 'active' ? 's-active' : s.status === 'away' ? 's-away' : 's-closed';
     const badge = unread[s.id] ? `<div class="badge">${unread[s.id]}</div>` : '';
     const lastMsg = s.messages?.slice(-1)[0];
-    const preview = lastMsg ? lastMsg.text.substring(0, 28) + (lastMsg.text.length > 28 ? '...' : '') : (s.device || '');
+    const preview = lastMsg ? lastMsg.text.substring(0, 28) + (lastMsg.text.length > 28 ? '...' : '') : (s.service || s.device || '');
     return `<div class="session-item ${activeSessionId === s.id ? 'active' : ''}" onclick="openSession('${s.id}')">
       <div class="s-name"><span class="status-indicator ${dot}"></span>${escHtml(s.name)}</div>
-      <div class="s-page">${escHtml(preview)}</div>
+      <div class="s-page">${escHtml(s.service ? '🎯 ' + s.service : preview)}</div>
       <div class="s-time">${timeAgo(s.connectedAt)}</div>
       ${badge}
     </div>`;
@@ -303,10 +441,10 @@ function openSession(sessionId) {
     <div class="chat-header">
       <div>
         <div class="visitor-name">👤 ${escHtml(session.name)}</div>
-        <div class="visitor-page">🌐 ${escHtml(session.page || '/')}</div>
+        <div class="visitor-page">${session.service ? '🎯 ' + escHtml(session.service) : '🌐 ' + escHtml(session.page || '/')}</div>
       </div>
       <div class="header-actions">
-        <button class="btn-save" onclick="openSaveModal('${sessionId}')">💾 Save Transcript</button>
+        <button class="btn-save" onclick="openSaveModal('${sessionId}')">💾 Save</button>
         <button class="btn-close-chat" onclick="closeSession('${sessionId}')">🔴 Close</button>
       </div>
     </div>
