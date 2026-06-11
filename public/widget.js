@@ -249,8 +249,7 @@
 
   // Messages
   var messages = d.createElement('div'); messages.id = 'lc-messages'; messages.setAttribute('role','log'); messages.setAttribute('aria-live','polite'); messages.setAttribute('aria-label','Chat messages');
-  var greet = d.createElement('div'); greet.className = 'lc-msg from-admin'; greet.textContent = 'Hi! \uD83D\uDC4B How can we help you today?';
-  messages.appendChild(greet);
+  // No default greeting — service selection drives the first message
 
   // Typing
   var typing = d.createElement('div'); typing.id = 'lc-typing'; typing.setAttribute('aria-live','polite');
@@ -331,15 +330,10 @@
     localStorage.setItem('lc_active', '1');
     hasActiveSession = true;
     toggleWidget(true);
-    function tryEmit() {
-      if (socket && connected) {
-        socket.emit('visitor:service_selected', { service: service, sessionId: sessionId });
-      } else {
-        setTimeout(tryEmit, 300);
-      }
+    // Note: visitor:service_selected is emitted by ui-metrics.js — not here
+    if (!socket) {
+      loadSocket(function () { initSocket(); });
     }
-    if (!socket) { loadSocket(function () { initSocket(); setTimeout(tryEmit, 600); }); }
-    else { tryEmit(); }
   };
 
   // ─── Open / Close ─────────────────────────────────────────────
