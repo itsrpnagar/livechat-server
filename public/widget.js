@@ -22,6 +22,7 @@
   // ─── State ───────────────────────────────────────────────────
   var socket = null, connected = false, typingTimer;
   var isOpen = false, unreadCount = 0;
+  var hasActiveSession = localStorage.getItem('lc_active') === '1';
 
   function isMobile() { return w.innerWidth <= 768; }
 
@@ -40,6 +41,13 @@
 
     socket.on('connect', function () {
       connected = true;
+
+      // ── Try restore if active session exists ──
+      if (hasActiveSession && sessionId) {
+        socket.emit('visitor:restore', { sessionId: sessionId });
+        return;
+      }
+
       var ua = navigator.userAgent;
       var device = 'Desktop';
       if (/iPhone|iPod/.test(ua))                        device = 'iOS';
@@ -61,6 +69,50 @@
         utmMedium   : p.get('utm_medium')   || '',
         utmCampaign : p.get('utm_campaign') || '',
         gclid       : p.get('gclid')        || ''
+      });
+      setStatus('online');
+    });
+
+    // ── Session restored after refresh ──
+    socket.on('visitor:restored', function (data) {
+      sessionId = data.sessionId;
+      localStorage.setItem('lc_sid', sessionId);
+      setStatus('online');
+
+      // Reopen chat window with history
+      toggleWidget(true);
+      if (data.messages && data.messages.length) {
+        var box = d.getElementById('lc-messages');
+        if (box) {
+          // Clear default greeting
+          while (box.firstChild) box.removeChild(box.firstChild);
+          // Restore all messages
+          for (var i = 0; i < data.messages.length; i++) {
+            appendMsg(data.messages[i].text, data.messages[i].from);
+          }
+        }
+      }
+    });
+
+    // ── Restore failed — fresh start ──
+    socket.on('visitor:restore_failed', function () {
+      localStorage.removeItem('lc_active');
+      hasActiveSession = false;
+      // Join fresh
+      var ua = navigator.userAgent;
+      var device = 'Desktop';
+      if (/iPhone|iPod/.test(ua)) device = 'iOS';
+      else if (/iPad/.test(ua)) device = 'Tablet';
+      else if (/Android/.test(ua) && /Mobile/.test(ua)) device = 'Android';
+      var p = new URLSearchParams(w.location.search);
+      socket.emit('visitor:join', {
+        sessionId: sessionId, name: 'Visitor',
+        page: w.location.href, referrer: d.referrer || '',
+        device: device, userAgent: ua,
+        utmSource: p.get('utm_source') || '',
+        utmMedium: p.get('utm_medium') || '',
+        utmCampaign: p.get('utm_campaign') || '',
+        gclid: p.get('gclid') || ''
       });
       setStatus('online');
     });
@@ -262,6 +314,8 @@
       sessionId = newSessionId;
       localStorage.setItem('lc_sid', newSessionId);
     }
+    localStorage.setItem('lc_active', '1');
+    hasActiveSession = true;
     toggleWidget(true);
     function tryEmit() {
       if (socket && connected) {
@@ -276,12 +330,21 @@
 
   // ─── Open / Close ─────────────────────────────────────────────
   btn.onclick = function () { toggleWidget(); };
-  d.getElementById('lc-close-btn').onclick = function () { toggleWidget(false); };
+  d.getElementById('lc-close-btn').onclick = function () {
+    // Notify server visitor closed chat
+    if (socket && connected && sessionId) {
+      socket.emit('visitor:chat_closed', { sessionId: sessionId });
+    }
+    toggleWidget(false);
+  };
 
   function toggleWidget(force) {
     isOpen = (force !== undefined) ? force : !isOpen;
 
     if (isOpen) {
+      // Mark session as active in localStorage
+      localStorage.setItem('lc_active', '1');
+
       if (isMobile()) {
         widget.classList.add('lc-mobile');
         d.body.style.overflow = 'hidden';
@@ -306,6 +369,9 @@
       if (!socket) loadSocket(initSocket);
 
     } else {
+      // Clear active session flag when visitor closes chat
+      localStorage.removeItem('lc_active');
+
       widget.style.display = 'none';
       widget.style.top     = '';
       widget.style.height  = '';
