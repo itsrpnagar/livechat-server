@@ -152,7 +152,18 @@ io.on("connection", (socket) => {
       socket.emit("admin:message_sent", { sessionId, msg });
     });
 
-    socket.on("admin:get_session",    ({ sessionId }) => { const s = sessions[sessionId]; if (s) socket.emit("admin:session_detail", s); });
+    // ── Admin: reconnect visitor after refresh ──
+    socket.on("admin:reconnect_visitor", ({ sessionId }) => {
+      const session = sessions[sessionId];
+      if (!session || !session.visitorSocketId) return;
+      // Tell visitor to reopen chat with history
+      io.to(session.visitorSocketId).emit("chat:reopen", {
+        sessionId,
+        messages: session.messages,
+      });
+      session.status = "active";
+      socket.emit("admin:session_reconnected", { sessionId });
+    });
     socket.on("admin:close_session",  ({ sessionId }) => {
       const s = sessions[sessionId];
       if (s) { s.status = "closed"; if (s.visitorSocketId) io.to(s.visitorSocketId).emit("chat:closed"); socket.emit("admin:session_closed", { sessionId }); }
@@ -265,23 +276,21 @@ io.on("connection", (socket) => {
       socket.emit("visitor:restore_failed");
       return;
     }
-    // Reconnect visitor to existing session
+    // Update socket ID only — don't reopen chat
     session.visitorSocketId = socket.id;
-    session.status = "active";
+    session.status = "away";
     socket.sessionId = sid;
 
-    // Send full message history back to visitor
-    socket.emit("visitor:restored", {
-      sessionId: sid,
-      messages: session.messages,
-    });
+    socket.emit("visitor:restore_ok", { sessionId: sid });
 
-    // Notify admin visitor is back
+    // Notify admin — show Reconnect button
     if (adminSocketId) {
-      io.to(adminSocketId).emit("admin:visitor_reconnected", { sessionId: sid });
-      io.to(adminSocketId).emit("admin:visitor_update", activeVisitorData.get(deviceId) || {});
+      io.to(adminSocketId).emit("admin:visitor_refreshed", {
+        sessionId: sid,
+        deviceId,
+      });
     }
-    console.log("Visitor restored session:", sid);
+    console.log("Visitor refreshed page, session kept:", sid);
   });
 
   // ── Visitor: closed chat window ─────────────────────────────
