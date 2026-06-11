@@ -314,8 +314,17 @@ function connect() {
     if (visitors[deviceId]) { visitors[deviceId].alerted = true; renderVisitorFeed(); }
   });
 
+  // Only reset alerted if visitor dismissed WITHOUT starting chat
   socket.on('admin:lc_dismissed', ({ deviceId }) => {
-    if (visitors[deviceId]) { visitors[deviceId].alerted = false; renderVisitorFeed(); }
+    // Check if this visitor has an active/away session — if yes, keep alerted
+    const hasSession = Object.values(sessions).some(s =>
+      s.visitorSocketId === (visitors[deviceId] && visitors[deviceId].socketId) &&
+      s.status !== 'closed'
+    );
+    if (!hasSession && visitors[deviceId]) {
+      visitors[deviceId].alerted = false;
+      renderVisitorFeed();
+    }
   });
 
   // ── Chat Sessions ──
@@ -372,6 +381,7 @@ function connect() {
       sessions[sessionId].status = 'active';
       sessions[sessionId]._refreshed = false;
       renderSessions();
+      renderVisitorFeed();
       showNotif('🟢 Visitor reconnected');
     }
   });
@@ -425,14 +435,13 @@ function renderVisitorFeed() {
 
     const ipTypeColor = v.isDatacenter ? 'color:var(--red)' : 'color:var(--green)';
 
-    // Check if this visitor has a refreshed session
-    const refreshedSession = Object.values(sessions).find(s =>
-      s._refreshed && s.visitorSocketId === v.socketId
-    );
+    // Check if this visitor has a refreshed session — match by socketId
+    const refreshedSession = Object.values(sessions).find(function(s) {
+      return s._refreshed === true && s.visitorSocketId === v.socketId;
+    });
 
     let btnHtml = '';
     if (refreshedSession) {
-      // Show Reconnect button — visitor refreshed page
       btnHtml = `<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed('${refreshedSession.id}', this)">🔄 Reconnect Chat</button>`;
     } else if (isBlocked) {
       btnHtml = `<button class="btn-alert blocked" disabled>Blocked</button>`;
