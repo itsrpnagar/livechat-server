@@ -422,9 +422,9 @@ function renderVisitorFeed() {
     else                     badgeHtml = '<span class="vc-badge residential">✅ Residential</span>';
     const ipTypeColor = v.isDatacenter ? 'color:var(--red)' : 'color:var(--green)';
 
-    // Find reconnectable session for this visitor
+    // Find reconnectable session for this visitor by deviceId
     const reconnectSession = Object.values(sessions).find(function(s) {
-      return s._reconnectable === true && s.visitorSocketId === v.socketId;
+      return s._reconnectable === true && s._deviceId === v.deviceId;
     });
 
     let btnHtml = '';
