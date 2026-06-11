@@ -258,6 +258,39 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ── Visitor: restore session after refresh ──────────────────
+  socket.on("visitor:restore", ({ sessionId: sid }) => {
+    const session = sessions[sid];
+    if (!session || session.status === "closed") {
+      socket.emit("visitor:restore_failed");
+      return;
+    }
+    // Reconnect visitor to existing session
+    session.visitorSocketId = socket.id;
+    session.status = "active";
+    socket.sessionId = sid;
+
+    // Send full message history back to visitor
+    socket.emit("visitor:restored", {
+      sessionId: sid,
+      messages: session.messages,
+    });
+
+    // Notify admin visitor is back
+    if (adminSocketId) {
+      io.to(adminSocketId).emit("admin:visitor_reconnected", { sessionId: sid });
+      io.to(adminSocketId).emit("admin:visitor_update", activeVisitorData.get(deviceId) || {});
+    }
+    console.log("Visitor restored session:", sid);
+  });
+
+  // ── Visitor: closed chat window ─────────────────────────────
+  socket.on("visitor:chat_closed", ({ sessionId: sid }) => {
+    if (adminSocketId) {
+      io.to(adminSocketId).emit("admin:visitor_closed_chat", { sessionId: sid });
+    }
+  });
+
   // ── Visitor: join existing chat ──
   socket.on("visitor:join", ({ sessionId, name, page, referrer, device: dev, utmSource, utmMedium, utmCampaign, gclid }) => {
     let session = sessions[sessionId];
