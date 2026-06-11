@@ -205,7 +205,7 @@ io.on("connection", (socket) => {
 
   // ── Service selected → start chat ────────────────────────────
   socket.on("visitor:service_selected", ({ service, sessionId: sid }) => {
-    // Prevent duplicate session creation
+    // Prevent duplicate
     if (sessions[sid]) {
       socket.sessionId = sid;
       sessions[sid].visitorSocketId = socket.id;
@@ -226,6 +226,13 @@ io.on("connection", (socket) => {
     sessions[sid] = session;
     socket.sessionId = sid;
     socket.emit("visitor:session", { sessionId: sid });
+
+    // Single greeting message
+    const greeting = `Hi! I see you need help with "${service}". A live agent will be with you shortly.`;
+    const msg = { id: crypto.randomUUID(), from: "admin", text: greeting, time: new Date().toISOString() };
+    session.messages.push(msg);
+    socket.emit("chat:message", msg); // to visitor
+
     stats.chatsStarted++;
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:new_session", session);
