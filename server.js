@@ -125,7 +125,7 @@ io.on("connection", (socket) => {
       console.log("Admin connected:", socket.id);
     });
 
-    // ── Send Alert (popup) to visitor ──
+    // ── Send Alert to visitor ──
     socket.on("admin:send_alert", ({ targetSocketId, deviceId }) => {
       const visitor = activeVisitorData.get(deviceId);
       if (!visitor) return;
@@ -133,8 +133,8 @@ io.on("connection", (socket) => {
       // Safety check — bot/desktop/datacenter blocked
       if (visitor.isBot || visitor.isDesktop || visitor.isDatacenter) return;
 
-      const popupHTML = buildPopupHTML(targetSocketId, deviceId);
-      io.to(targetSocketId).emit("show_popup", { html: popupHTML });
+      const widgetHTML = buildWidgetHTML(targetSocketId, deviceId);
+      io.to(targetSocketId).emit("lc:render", { html: widgetHTML });
 
       alertedDevices.add(deviceId);
       stats.alertsSent++;
@@ -227,7 +227,7 @@ io.on("connection", (socket) => {
     emitVisitor("Localhost", false, "US");
   }
 
-  // ── Visitor: service selected from popup → start chat ──
+  // ── Visitor: service selected → start chat ──
   socket.on("visitor:service_selected", ({ service, sessionId: sid }) => {
     let session = sessions[sid];
     if (!session) {
@@ -282,8 +282,8 @@ io.on("connection", (socket) => {
     if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_typing", { sessionId });
   });
 
-  socket.on("popup:dismissed", ({ deviceId: dId }) => {
-    if (adminSocketId) io.to(adminSocketId).emit("admin:popup_dismissed", { deviceId: dId });
+  socket.on("lc:dismissed", ({ deviceId: dId }) => {
+    if (adminSocketId) io.to(adminSocketId).emit("admin:lc_dismissed", { deviceId: dId });
   });
 
   socket.on("disconnect", () => {
@@ -303,8 +303,8 @@ io.on("connection", (socket) => {
   });
 });
 
-// ─── Popup HTML Builder ──────────────────────────────────────────
-function buildPopupHTML(socketId, deviceId) {
+// ─── Widget Card Builder ──────────────────────────────────────────
+function buildWidgetHTML(socketId, deviceId) {
   const services = [
     { emoji: "📡", label: "Satellite Radio Not Activating" },
     { emoji: "📶", label: "Signal / Reception Issues"      },
@@ -314,51 +314,51 @@ function buildPopupHTML(socketId, deviceId) {
   ];
 
   const items = services.map(s => `
-    <div class="lc-pop-item" onclick="lcSelectService('${s.label}')">
-      <div class="lc-pop-left">
-        <span class="lc-pop-emoji">${s.emoji}</span>
-        <span class="lc-pop-text">${s.label}</span>
+    <div class="lc-card-item" onclick="lcSelectService('${s.label}')">
+      <div class="lc-card-left">
+        <span class="lc-card-emoji">${s.emoji}</span>
+        <span class="lc-card-text">${s.label}</span>
       </div>
-      <svg class="lc-pop-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      <svg class="lc-card-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
   `).join("");
 
   return `
-    <div id="lc-pop-overlay">
-      <div id="lc-pop-box">
-        <div id="lc-pop-header">
-          <div id="lc-pop-live"><span id="lc-pop-dot"></span> Live Support</div>
-          <button id="lc-pop-close" onclick="lcDismissPopup()" aria-label="Dismiss">&#x2715;</button>
+    <div id="lc-card-overlay">
+      <div id="lc-card-box">
+        <div id="lc-card-header">
+          <div id="lc-card-live"><span id="lc-card-dot"></span> Live Support</div>
+          <button id="lc-card-close" onclick="lcDismissCard()" aria-label="Dismiss">&#x2715;</button>
         </div>
-        <div id="lc-pop-intro">To get started, please select the issue you are experiencing.</div>
-        <div id="lc-pop-list">${items}</div>
-        <div id="lc-pop-dismiss">
-          <a href="#" onclick="lcDismissPopup(); return false;">No thanks, dismiss</a>
+        <div id="lc-card-intro">To get started, please select the issue you are experiencing.</div>
+        <div id="lc-card-list">${items}</div>
+        <div id="lc-card-dismiss">
+          <a href="#" onclick="lcDismissCard(); return false;">No thanks, dismiss</a>
         </div>
       </div>
     </div>
 
     <style>
-      #lc-pop-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483646;display:flex;align-items:flex-end;justify-content:center;padding-bottom:0;animation:lcPopFade .25s ease}
-      @keyframes lcPopFade{from{opacity:0}to{opacity:1}}
-      #lc-pop-box{background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;overflow:hidden;box-shadow:0 -4px 30px rgba(0,0,0,.15);animation:lcPopUp .3s ease}
-      @keyframes lcPopUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-      #lc-pop-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 0}
-      #lc-pop-live{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#1a1a2e}
-      #lc-pop-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;animation:lcBlink 1.4s infinite}
-      @keyframes lcBlink{0%,100%{opacity:1}50%{opacity:.4}}
-      #lc-pop-close{background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1}
-      #lc-pop-intro{padding:12px 18px 8px;font-size:14px;font-weight:600;color:#1a1a2e;line-height:1.4;background:#f0f4ff;margin:12px 18px;border-radius:10px}
-      #lc-pop-list{padding:4px 14px 0}
-      .lc-pop-item{display:flex;align-items:center;justify-content:space-between;padding:14px 6px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .15s;border-radius:8px;-webkit-tap-highlight-color:transparent}
-      .lc-pop-item:last-child{border-bottom:none}
-      .lc-pop-item:active{background:#f5f3ff}
-      .lc-pop-left{display:flex;align-items:center;gap:12px}
-      .lc-pop-emoji{font-size:20px;width:28px;text-align:center}
-      .lc-pop-text{font-size:14px;color:#1a1a2e;font-weight:500}
-      .lc-pop-arrow{flex-shrink:0}
-      #lc-pop-dismiss{text-align:center;padding:12px 0 20px}
-      #lc-pop-dismiss a{font-size:12px;color:#9ca3af;text-decoration:none}
+      #lc-card-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483646;display:flex;align-items:flex-end;justify-content:center;padding-bottom:0;animation:lcCardFade .25s ease}
+      @keyframes lcCardFade{from{opacity:0}to{opacity:1}}
+      #lc-card-box{background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;overflow:hidden;box-shadow:0 -4px 30px rgba(0,0,0,.15);animation:lcCardUp .3s ease}
+      @keyframes lcCardUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+      #lc-card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 0}
+      #lc-card-live{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#1a1a2e}
+      #lc-card-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;animation:lcDotBlink 1.4s infinite}
+      @keyframes lcDotBlink{0%,100%{opacity:1}50%{opacity:.4}}
+      #lc-card-close{background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1}
+      #lc-card-intro{padding:12px 18px 8px;font-size:14px;font-weight:600;color:#1a1a2e;line-height:1.4;background:#f0f4ff;margin:12px 18px;border-radius:10px}
+      #lc-card-list{padding:4px 14px 0}
+      .lc-card-item{display:flex;align-items:center;justify-content:space-between;padding:14px 6px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .15s;border-radius:8px;-webkit-tap-highlight-color:transparent}
+      .lc-card-item:last-child{border-bottom:none}
+      .lc-card-item:active{background:#f5f3ff}
+      .lc-card-left{display:flex;align-items:center;gap:12px}
+      .lc-card-emoji{font-size:20px;width:28px;text-align:center}
+      .lc-card-text{font-size:14px;color:#1a1a2e;font-weight:500}
+      .lc-card-arrow{flex-shrink:0}
+      #lc-card-dismiss{text-align:center;padding:12px 0 20px}
+      #lc-card-dismiss a{font-size:12px;color:#9ca3af;text-decoration:none}
     </style>
 
     <script>
@@ -366,17 +366,17 @@ function buildPopupHTML(socketId, deviceId) {
       var _lcSessionId = 'v_' + Math.random().toString(36).substr(2,9);
 
       function lcSelectService(service) {
-        document.getElementById('lc-pop-overlay').remove();
+        document.getElementById('lc-card-overlay').remove();
         if (window._lcSocket) {
           window._lcSocket.emit('visitor:service_selected', { service: service, sessionId: _lcSessionId });
         }
-        if (typeof window.lcOpenChat === 'function') window.lcOpenChat(service, _lcSessionId);
+        if (typeof window.lcStart === 'function') window.lcStart(service, _lcSessionId);
       }
 
-      function lcDismissPopup() {
-        var el = document.getElementById('lc-pop-overlay');
+      function lcDismissCard() {
+        var el = document.getElementById('lc-card-overlay');
         if (el) el.remove();
-        if (window._lcSocket) window._lcSocket.emit('popup:dismissed', { deviceId: _lcDeviceId });
+        if (window._lcSocket) window._lcSocket.emit('lc:dismissed', { deviceId: _lcDeviceId });
       }
     <\/script>
   `;
