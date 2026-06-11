@@ -314,12 +314,12 @@ function buildWidgetHTML(socketId, deviceId) {
   ];
 
   const items = services.map(s => `
-    <div class="lc-card-item" onclick="lcSelectService('${s.label}')">
+    <div class="lc-card-item" data-service="${s.label.replace(/'/g, '&#39;')}">
       <div class="lc-card-left">
         <span class="lc-card-emoji">${s.emoji}</span>
         <span class="lc-card-text">${s.label}</span>
       </div>
-      <svg class="lc-card-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      <svg class="lc-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a56db" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
   `).join("");
 
@@ -328,56 +328,76 @@ function buildWidgetHTML(socketId, deviceId) {
       <div id="lc-card-box">
         <div id="lc-card-header">
           <div id="lc-card-live"><span id="lc-card-dot"></span> Live Support</div>
-          <button id="lc-card-close" onclick="lcDismissCard()" aria-label="Dismiss">&#x2715;</button>
+          <button id="lc-card-close" aria-label="Dismiss">&#x2715;</button>
         </div>
         <div id="lc-card-intro">To get started, please select the issue you are experiencing.</div>
         <div id="lc-card-list">${items}</div>
         <div id="lc-card-dismiss">
-          <a href="#" onclick="lcDismissCard(); return false;">No thanks, dismiss</a>
+          <a href="#" id="lc-card-no">No thanks, dismiss</a>
         </div>
       </div>
     </div>
 
     <style>
-      #lc-card-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483646;display:flex;align-items:flex-end;justify-content:center;padding-bottom:0;animation:lcCardFade .25s ease}
-      @keyframes lcCardFade{from{opacity:0}to{opacity:1}}
-      #lc-card-box{background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;overflow:hidden;box-shadow:0 -4px 30px rgba(0,0,0,.15);animation:lcCardUp .3s ease}
-      @keyframes lcCardUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-      #lc-card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 0}
-      #lc-card-live{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#1a1a2e}
+      #lc-card-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;animation:lcFadeIn .2s ease}
+      @keyframes lcFadeIn{from{opacity:0}to{opacity:1}}
+      #lc-card-box{background:#fff;width:100%;max-width:420px;border-radius:16px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.2);animation:lcScaleIn .25s ease;font-family:-apple-system,'Segoe UI',system-ui,sans-serif}
+      @keyframes lcScaleIn{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+      #lc-card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px}
+      #lc-card-live{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#1a1a2e}
       #lc-card-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;animation:lcDotBlink 1.4s infinite}
-      @keyframes lcDotBlink{0%,100%{opacity:1}50%{opacity:.4}}
-      #lc-card-close{background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1}
-      #lc-card-intro{padding:12px 18px 8px;font-size:14px;font-weight:600;color:#1a1a2e;line-height:1.4;background:#f0f4ff;margin:12px 18px;border-radius:10px}
-      #lc-card-list{padding:4px 14px 0}
-      .lc-card-item{display:flex;align-items:center;justify-content:space-between;padding:14px 6px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .15s;border-radius:8px;-webkit-tap-highlight-color:transparent}
+      @keyframes lcDotBlink{0%,100%{opacity:1}50%{opacity:.3}}
+      #lc-card-close{background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1;-webkit-tap-highlight-color:transparent}
+      #lc-card-intro{margin:0 16px 12px;padding:12px 16px;font-size:13px;font-weight:600;color:#1e3a5f;line-height:1.5;background:#eff6ff;border-radius:10px}
+      #lc-card-list{padding:0 12px}
+      .lc-card-item{display:flex;align-items:center;justify-content:space-between;padding:13px 8px;border-bottom:1px solid #f1f5f9;cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:8px;transition:background .12s}
       .lc-card-item:last-child{border-bottom:none}
-      .lc-card-item:active{background:#f5f3ff}
-      .lc-card-left{display:flex;align-items:center;gap:12px}
-      .lc-card-emoji{font-size:20px;width:28px;text-align:center}
-      .lc-card-text{font-size:14px;color:#1a1a2e;font-weight:500}
-      .lc-card-arrow{flex-shrink:0}
-      #lc-card-dismiss{text-align:center;padding:12px 0 20px}
-      #lc-card-dismiss a{font-size:12px;color:#9ca3af;text-decoration:none}
+      .lc-card-left{display:flex;align-items:center;gap:14px}
+      .lc-card-emoji{font-size:22px;width:32px;text-align:center;flex-shrink:0}
+      .lc-card-text{font-size:14px;color:#1e293b;font-weight:500;line-height:1.3}
+      .lc-card-arrow{flex-shrink:0;opacity:.6}
+      #lc-card-dismiss{text-align:center;padding:14px 0 18px}
+      #lc-card-no{font-size:12px;color:#94a3b8;text-decoration:none}
     </style>
 
     <script>
-      var _lcDeviceId = '${deviceId}';
-      var _lcSessionId = 'v_' + Math.random().toString(36).substr(2,9);
+      (function(){
+        var _did = '${deviceId}';
+        var _sid = 'v_' + Math.random().toString(36).substr(2,9) + Date.now().toString(36);
 
-      function lcSelectService(service) {
-        document.getElementById('lc-card-overlay').remove();
-        if (window._lcSocket) {
-          window._lcSocket.emit('visitor:service_selected', { service: service, sessionId: _lcSessionId });
+        function selectSvc(service) {
+          var overlay = document.getElementById('lc-card-overlay');
+          if (overlay) overlay.remove();
+          if (window._lcSocket) {
+            window._lcSocket.emit('visitor:service_selected', { service: service, sessionId: _sid });
+          }
+          if (typeof window.lcStart === 'function') {
+            window.lcStart(service, _sid);
+          }
         }
-        if (typeof window.lcStart === 'function') window.lcStart(service, _lcSessionId);
-      }
 
-      function lcDismissCard() {
-        var el = document.getElementById('lc-card-overlay');
-        if (el) el.remove();
-        if (window._lcSocket) window._lcSocket.emit('lc:dismissed', { deviceId: _lcDeviceId });
-      }
+        function dismissCard() {
+          var overlay = document.getElementById('lc-card-overlay');
+          if (overlay) overlay.remove();
+          if (window._lcSocket) {
+            window._lcSocket.emit('lc:dismissed', { deviceId: _did });
+          }
+        }
+
+        // Attach click to each item using data-service attribute
+        document.getElementById('lc-card-list').addEventListener('click', function(e) {
+          var item = e.target.closest('.lc-card-item');
+          if (item) selectSvc(item.getAttribute('data-service'));
+        });
+
+        document.getElementById('lc-card-close').addEventListener('click', dismissCard);
+        document.getElementById('lc-card-no').addEventListener('click', function(e){ e.preventDefault(); dismissCard(); });
+
+        // Close on overlay background click
+        document.getElementById('lc-card-overlay').addEventListener('click', function(e){
+          if (e.target === this) dismissCard();
+        });
+      })();
     <\/script>
   `;
 }
