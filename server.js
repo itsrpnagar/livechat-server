@@ -20,31 +20,26 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// ─── Bot / Crawler Detection ─────────────────────────────────────
+// ─── Bot Detection ───────────────────────────────────────────────
 const BANNED_KEYWORDS = [
-  // Google
   "googlebot", "adsbot", "mediapartners", "lighthouse",
-  // Headless / Automated
   "headless", "phantomjs", "selenium", "puppeteer", "playwright",
-  // Search crawlers
   "bingbot", "slurp", "duckduckbot", "baiduspider",
-  "yandexbot", "applebot",
-  // Social crawlers
-  "facebookexternalhit", "twitterbot",
-  // SEO tools
+  "yandexbot", "applebot", "facebookexternalhit", "twitterbot",
   "semrushbot", "ahrefsbot", "mj12bot"
 ];
 
 // ─── Visitor Tracking ────────────────────────────────────────────
 const activeSockets     = new Map(); // socketId → deviceId
-const deviceConnections = new Map(); // deviceId → count
+const deviceConnections = new Map(); // deviceId → socketId (latest)
 const activeVisitorData = new Map(); // deviceId → visitorData
-const alertedDevices    = new Set(); // deviceId → already alerted
+const alertedDevices    = new Set(); // deviceIds that got alert
+const bounceTimers      = new Map(); // deviceId → timer (for bounce detection)
 
 // ─── Stats ───────────────────────────────────────────────────────
 let stats = { activeVisitors: 0, alertsSent: 0, chatsStarted: 0 };
 
-// ─── Device ID Hash ─────────────────────────────────────────────
+// ─── Hash ────────────────────────────────────────────────────────
 function simpleHash(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -73,7 +68,6 @@ app.get("/",          (req, res) => res.json({ status: "LiveChat server running 
 app.get("/admin",     (req, res) => res.sendFile(path.join(__dirname, "public", "admin.html")));
 app.get("/widget.js", (req, res) => { res.setHeader("Content-Type", "application/javascript"); res.sendFile(path.join(__dirname, "public", "widget.js")); });
 
-// ─── Transcripts API ─────────────────────────────────────────────
 app.get("/api/transcripts", (req, res) => {
   const t = loadAllTranscripts(); t.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt)); res.json(t);
 });
@@ -87,7 +81,7 @@ app.post("/api/transcripts/save", (req, res) => {
     const { sessionId, customerName } = req.body;
     const session = sessions[sessionId];
     if (!session) return res.status(404).json({ error: "Session not found" });
-    const id   = crypto.randomUUID();
+    const id = crypto.randomUUID();
     const data = { id, customerName: customerName || session.name, sessionId: session.id, page: session.page, referrer: session.referrer, device: session.device, utmSource: session.utmSource, utmMedium: session.utmMedium, utmCampaign: session.utmCampaign, gclid: session.gclid, connectedAt: session.connectedAt, savedAt: new Date().toISOString(), messages: session.messages };
     fs.writeFileSync(path.join(TRANSCRIPTS_DIR, `${id}.json`), JSON.stringify(data, null, 2));
     res.json({ success: true, id });
@@ -98,9 +92,34 @@ app.delete("/api/transcripts/:id", (req, res) => {
   catch { res.status(500).json({ error: "Delete failed" }); }
 });
 
-// ─── In-memory chat sessions ─────────────────────────────────────
+// ─── Sessions ────────────────────────────────────────────────────
 const sessions    = {};
 let adminSocketId = null;
+
+// ─── Visitor status helper ───────────────────────────────────────
+// Returns: 'chatting' | 'reconnectable' | 'available' | 'blocked'
+function getVisitorStatus(deviceId) {
+  const vData = activeVisitorData.get(deviceId);
+  if (!vData) return 'available';
+
+  // Check if visitor has active chat session
+  const session = Object.values(sessions).find(s =>
+    s.visitorSocketId && activeSockets.has(s.visitorSocketId) &&
+    activeSockets.get(s.visitorSocketId) === deviceId &&
+    s.status === 'active'
+  );
+  if (session) return 'chatting';
+
+  // Check if visitor has reconnectable session (refreshed or closed chat)
+  const reconnectable = Object.values(sessions).find(s =>
+    s._reconnectable === true &&
+    activeVisitorData.get(deviceId) &&
+    s.visitorSocketId === vData.socketId
+  );
+  if (reconnectable) return 'reconnectable';
+
+  return 'available';
+}
 
 // ─── Socket.io ───────────────────────────────────────────────────
 io.on("connection", (socket) => {
@@ -116,26 +135,21 @@ io.on("connection", (socket) => {
       const ADMIN_USER = process.env.ADMIN_USERNAME || "admin";
       const ADMIN_PASS = process.env.ADMIN_PASSWORD || "admin123";
       if (username !== ADMIN_USER || password !== ADMIN_PASS) { socket.emit("admin:auth_failed"); return; }
-
       adminSocketId = socket.id;
       socket.emit("admin:auth_success");
       socket.emit("admin:all_sessions", Object.values(sessions));
       socket.emit("admin:all_visitors", Array.from(activeVisitorData.values()));
       socket.emit("update_stats", stats);
-      console.log("Admin connected:", socket.id);
+      console.log("Admin connected");
     });
 
-    // ── Send Alert to visitor ──
+    // ── Send Alert ──
     socket.on("admin:send_alert", ({ targetSocketId, deviceId }) => {
       const visitor = activeVisitorData.get(deviceId);
       if (!visitor) return;
-
-      // Safety check — bot/desktop/datacenter blocked
       if (visitor.isBot || visitor.isDesktop || visitor.isDatacenter) return;
-
       const widgetHTML = buildWidgetHTML(targetSocketId, deviceId);
       io.to(targetSocketId).emit("lc:render", { html: widgetHTML });
-
       alertedDevices.add(deviceId);
       stats.alertsSent++;
       io.to(adminSocketId).emit("update_stats", stats);
@@ -152,21 +166,23 @@ io.on("connection", (socket) => {
       socket.emit("admin:message_sent", { sessionId, msg });
     });
 
-    // ── Admin: reconnect visitor after refresh ──
+    // ── Reconnect visitor ──
     socket.on("admin:reconnect_visitor", ({ sessionId }) => {
       const session = sessions[sessionId];
       if (!session || !session.visitorSocketId) return;
-      // Tell visitor to reopen chat with history
       io.to(session.visitorSocketId).emit("chat:reopen", {
         sessionId,
         messages: session.messages,
       });
       session.status = "active";
+      session._reconnectable = false;
       socket.emit("admin:session_reconnected", { sessionId });
     });
-    socket.on("admin:close_session",  ({ sessionId }) => {
+
+    socket.on("admin:get_session",   ({ sessionId }) => { const s = sessions[sessionId]; if (s) socket.emit("admin:session_detail", s); });
+    socket.on("admin:close_session", ({ sessionId }) => {
       const s = sessions[sessionId];
-      if (s) { s.status = "closed"; if (s.visitorSocketId) io.to(s.visitorSocketId).emit("chat:closed"); socket.emit("admin:session_closed", { sessionId }); }
+      if (s) { s.status = "closed"; s._reconnectable = false; if (s.visitorSocketId) io.to(s.visitorSocketId).emit("chat:closed"); socket.emit("admin:session_closed", { sessionId }); }
     });
     socket.on("admin:typing", ({ sessionId }) => {
       const s = sessions[sessionId];
@@ -178,7 +194,7 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
-      if (socket.id === adminSocketId) { adminSocketId = null; console.log("Admin disconnected"); }
+      if (socket.id === adminSocketId) { adminSocketId = null; }
     });
 
     return;
@@ -187,19 +203,25 @@ io.on("connection", (socket) => {
   // ════════════════════════════════════════════════════════════════
   // VISITOR
   // ════════════════════════════════════════════════════════════════
-  const ua       = (socket.handshake.headers["user-agent"] || "").toLowerCase();
-  const parser   = new UAParser(ua);
-  const device   = parser.getDevice();
-  const isBot    = BANNED_KEYWORDS.some(k => ua.includes(k));
+  const ua        = (socket.handshake.headers["user-agent"] || "").toLowerCase();
+  const parser    = new UAParser(ua);
+  const device    = parser.getDevice();
+  const isBot     = BANNED_KEYWORDS.some(k => ua.includes(k));
   const isDesktop = !device.type || !["mobile","tablet","wearable"].includes(device.type);
-  const ip       = (socket.handshake.headers["x-forwarded-for"] || "").split(",")[0].trim() || socket.handshake.address || "";
-  const deviceId = simpleHash(ip + (parser.getOS().name || "") + (parser.getBrowser().name || ""));
+  const ip        = (socket.handshake.headers["x-forwarded-for"] || "").split(",")[0].trim() || socket.handshake.address || "";
+  const deviceId  = simpleHash(ip + (parser.getOS().name || "") + (parser.getBrowser().name || ""));
+
+  // Clear bounce timer if visitor reconnected
+  if (bounceTimers.has(deviceId)) {
+    clearTimeout(bounceTimers.get(deviceId));
+    bounceTimers.delete(deviceId);
+  }
 
   activeSockets.set(socket.id, deviceId);
-  deviceConnections.set(deviceId, (deviceConnections.get(deviceId) || 0) + 1);
+  deviceConnections.set(deviceId, socket.id);
   stats.activeVisitors = deviceConnections.size;
 
-  // ── Emit visitor to admin ──
+  // ── Emit visitor data to admin ────────────────────────────────
   const emitVisitor = (ispName, isDatacenter, countryCode) => {
     const flag = countryCode
       ? countryCode.toUpperCase().replace(/./g, c => String.fromCodePoint(c.charCodeAt(0) + 127397))
@@ -219,11 +241,14 @@ io.on("connection", (socket) => {
       alerted:     alertedDevices.has(deviceId),
       page:        socket.handshake.query.page || "/",
       connectedAt: new Date().toISOString(),
+      status:      "active", // new visitor
     };
 
     activeVisitorData.set(deviceId, visitorData);
-    if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_update", visitorData);
-    io.to(adminSocketId || "").emit("update_stats", stats);
+    if (adminSocketId) {
+      io.to(adminSocketId).emit("admin:visitor_update", visitorData);
+      io.to(adminSocketId).emit("update_stats", stats);
+    }
   };
 
   emitVisitor("Loading...", false, "");
@@ -238,25 +263,26 @@ io.on("connection", (socket) => {
     emitVisitor("Localhost", false, "US");
   }
 
-  // ── Visitor: service selected → start chat ──
+  // ── Visitor: service selected → start chat ───────────────────
   socket.on("visitor:service_selected", ({ service, sessionId: sid }) => {
     let session = sessions[sid];
     if (!session) {
       session = {
-        id: sid, name: "Visitor", page: socket.handshake.query.page || "/",
+        id: sid, name: "Visitor",
+        page: socket.handshake.query.page || "/",
         referrer: "", device: isDesktop ? "Desktop" : parser.getDevice().type || "Mobile",
         utmSource: "", utmMedium: "", utmCampaign: "", gclid: "",
         messages: [], status: "active",
         connectedAt: new Date().toISOString(),
         visitorSocketId: socket.id,
         service,
+        _reconnectable: false,
       };
       sessions[sid] = session;
     }
     socket.sessionId = sid;
     socket.emit("visitor:session", { sessionId: sid });
 
-    // Auto greeting with selected service
     const greeting = `Hi! I see you need help with "${service}". A live agent will be with you shortly.`;
     const msg = { id: crypto.randomUUID(), from: "admin", text: greeting, time: new Date().toISOString() };
     session.messages.push(msg);
@@ -267,55 +293,71 @@ io.on("connection", (socket) => {
       io.to(adminSocketId).emit("admin:new_session", session);
       io.to(adminSocketId).emit("update_stats", stats);
     }
+
+    // Update visitor status to chatting
+    const vData = activeVisitorData.get(deviceId);
+    if (vData) {
+      vData.chatStatus = "chatting";
+      activeVisitorData.set(deviceId, vData);
+      if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_update", vData);
+    }
   });
 
-  // ── Visitor: restore session after refresh ──────────────────
+  // ── Visitor: restore session after refresh ───────────────────
   socket.on("visitor:restore", ({ sessionId: sid }) => {
     const session = sessions[sid];
     if (!session || session.status === "closed") {
       socket.emit("visitor:restore_failed");
       return;
     }
-    // Update socket ID
     session.visitorSocketId = socket.id;
     session.status = "away";
-    session._refreshed = true;  // Mark refreshed on session
+    session._reconnectable = true;
     socket.sessionId = sid;
 
     socket.emit("visitor:restore_ok", { sessionId: sid });
 
-    // Re-emit visitor to admin — keep alerted status as-is
     if (adminSocketId) {
       const vData = activeVisitorData.get(deviceId);
       if (vData) {
-        vData.socketId = socket.id; // Update socket ID only
-        // DO NOT reset alerted — keep it as is
+        vData.socketId    = socket.id;
+        vData.chatStatus  = "reconnectable";
         activeVisitorData.set(deviceId, vData);
         io.to(adminSocketId).emit("admin:visitor_update", vData);
       }
-      // Notify admin to show Reconnect button
-      io.to(adminSocketId).emit("admin:visitor_refreshed", {
-        sessionId: sid,
-        deviceId,
-      });
+      io.to(adminSocketId).emit("admin:visitor_refreshed", { sessionId: sid, deviceId });
     }
-    console.log("Visitor refreshed, session kept:", sid);
   });
 
-  // ── Visitor: closed chat window ─────────────────────────────
+  // ── Visitor: closed chat window (X button) ───────────────────
   socket.on("visitor:chat_closed", ({ sessionId: sid }) => {
+    const session = sessions[sid];
+    if (session) {
+      session.status = "away";
+      session._reconnectable = true;
+    }
+    // Update visitor status
+    const vData = activeVisitorData.get(deviceId);
+    if (vData) {
+      vData.chatStatus = "reconnectable";
+      activeVisitorData.set(deviceId, vData);
+      if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_update", vData);
+    }
     if (adminSocketId) {
-      io.to(adminSocketId).emit("admin:visitor_closed_chat", { sessionId: sid });
+      io.to(adminSocketId).emit("admin:visitor_closed_chat", { sessionId: sid, deviceId });
     }
   });
 
-  // ── Visitor: join existing chat ──
+  // ── Visitor: join (no existing session) ─────────────────────
   socket.on("visitor:join", ({ sessionId, name, page, referrer, device: dev, utmSource, utmMedium, utmCampaign, gclid }) => {
     let session = sessions[sessionId];
     if (!session) {
-      session = { id: sessionId || crypto.randomUUID(), name: name || "Visitor", page: page || "/", referrer: referrer || "", device: dev || "Mobile", utmSource: utmSource || "", utmMedium: utmMedium || "", utmCampaign: utmCampaign || "", gclid: gclid || "", messages: [], status: "active", connectedAt: new Date().toISOString(), visitorSocketId: socket.id };
+      session = { id: sessionId || crypto.randomUUID(), name: name || "Visitor", page: page || "/", referrer: referrer || "", device: dev || "Mobile", utmSource: utmSource || "", utmMedium: utmMedium || "", utmCampaign: utmCampaign || "", gclid: gclid || "", messages: [], status: "active", connectedAt: new Date().toISOString(), visitorSocketId: socket.id, _reconnectable: false };
       sessions[session.id] = session;
-    } else { session.visitorSocketId = socket.id; session.status = "active"; }
+    } else {
+      session.visitorSocketId = socket.id;
+      session.status = "active";
+    }
     socket.sessionId = session.id;
     socket.emit("visitor:session", { sessionId: session.id });
     if (adminSocketId) io.to(adminSocketId).emit("admin:new_session", session);
@@ -337,24 +379,43 @@ io.on("connection", (socket) => {
     if (adminSocketId) io.to(adminSocketId).emit("admin:lc_dismissed", { deviceId: dId });
   });
 
+  // ── Disconnect ───────────────────────────────────────────────
   socket.on("disconnect", () => {
     const dId = activeSockets.get(socket.id);
     activeSockets.delete(socket.id);
+
     if (dId) {
-      const count = (deviceConnections.get(dId) || 1) - 1;
-      if (count <= 0) { deviceConnections.delete(dId); activeVisitorData.delete(dId); if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_disconnect", dId); }
-      else deviceConnections.set(dId, count);
+      // Start bounce detection timer — 3 seconds
+      // If visitor reconnects within 3s = refresh, else = bounce
+      const timer = setTimeout(() => {
+        // Still disconnected after 3s = bounce
+        bounceTimers.delete(dId);
+        deviceConnections.delete(dId);
+        activeVisitorData.delete(dId);
+        stats.activeVisitors = deviceConnections.size;
+
+        if (adminSocketId) {
+          io.to(adminSocketId).emit("admin:visitor_bounced", { deviceId: dId });
+          io.to(adminSocketId).emit("update_stats", stats);
+        }
+        console.log("Visitor bounced:", dId);
+      }, 3000);
+
+      bounceTimers.set(dId, timer);
     }
+
+    // Update session status
     if (socket.sessionId && sessions[socket.sessionId]) {
       sessions[socket.sessionId].status = "away";
       if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_left", { sessionId: socket.sessionId });
     }
+
     stats.activeVisitors = deviceConnections.size;
     if (adminSocketId) io.to(adminSocketId).emit("update_stats", stats);
   });
 });
 
-// ─── Widget Card Builder ──────────────────────────────────────────
+// ─── Widget Card Builder ─────────────────────────────────────────
 function buildWidgetHTML(socketId, deviceId) {
   const services = [
     { emoji: "📡", label: "Satellite Radio Not Activating" },
@@ -374,8 +435,7 @@ function buildWidgetHTML(socketId, deviceId) {
     </div>
   `).join("");
 
-  
-  const html = `
+  return `
     <div id="lc-card-overlay">
       <div id="lc-card-box">
         <div id="lc-card-header">
@@ -384,9 +444,7 @@ function buildWidgetHTML(socketId, deviceId) {
         </div>
         <div id="lc-card-intro">To get started, please select the issue you are experiencing.</div>
         <div id="lc-card-list">${items}</div>
-        <div id="lc-card-dismiss">
-          <a href="#" id="lc-card-no">No thanks, dismiss</a>
-        </div>
+        <div id="lc-card-dismiss"><a href="#" id="lc-card-no">No thanks, dismiss</a></div>
       </div>
     </div>
     <style>
@@ -412,9 +470,7 @@ function buildWidgetHTML(socketId, deviceId) {
     </style>
     <lcdata id="lc-meta" data-did="${deviceId}" data-sid="v_${Math.random().toString(36).substr(2,9)}${Date.now().toString(36)}"></lcdata>
   `;
-
-  return html;
 }
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
