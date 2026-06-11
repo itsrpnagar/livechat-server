@@ -323,22 +323,16 @@
     }
     localStorage.setItem('lc_active', '1');
     hasActiveSession = true;
-
     toggleWidget(true);
 
-    var box = d.getElementById('lc-messages');
-    if (box) while (box.firstChild) box.removeChild(box.firstChild);
-
-    // messages.length > 1 means real chat happened — restore history
-    // messages.length <= 1 means only greeting or nothing — fresh start
-    if (data.messages && data.messages.length > 1) {
-      // Option A — restore history
-      for (var i = 0; i < data.messages.length; i++) {
-        appendMsg(data.messages[i].text, data.messages[i].from);
+    if (data.messages && data.messages.length) {
+      var box = d.getElementById('lc-messages');
+      if (box) {
+        while (box.firstChild) box.removeChild(box.firstChild);
+        for (var i = 0; i < data.messages.length; i++) {
+          appendMsg(data.messages[i].text, data.messages[i].from);
+        }
       }
-    } else {
-      // Option B — fresh greeting
-      appendMsg('Welcome back! A live agent is here to help you.', 'admin');
     }
 
     if (!socket) {
