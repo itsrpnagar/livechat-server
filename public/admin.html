@@ -310,7 +310,7 @@ function connect() {
     if (visitors[deviceId]) { visitors[deviceId].alerted = true; renderVisitorFeed(); }
   });
 
-  socket.on('admin:popup_dismissed', ({ deviceId }) => {
+  socket.on('admin:lc_dismissed', ({ deviceId }) => {
     if (visitors[deviceId]) { visitors[deviceId].alerted = false; renderVisitorFeed(); }
   });
 
