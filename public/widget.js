@@ -73,20 +73,30 @@
       setStatus('online');
     });
 
-    // ── Session restored after refresh ──
-    socket.on('visitor:restored', function (data) {
+    // ── Session kept after refresh — wait for admin reconnect ──
+    socket.on('visitor:restore_ok', function (data) {
       sessionId = data.sessionId;
       localStorage.setItem('lc_sid', sessionId);
       setStatus('online');
+      // Chat stays closed — admin will reopen it
+    });
 
-      // Reopen chat window with history
+    // ── Admin reconnected visitor — reopen chat ──
+    socket.on('chat:reopen', function (data) {
+      sessionId = data.sessionId;
+      localStorage.setItem('lc_sid', sessionId);
+      localStorage.setItem('lc_active', '1');
+      hasActiveSession = true;
+      setStatus('online');
+
+      // Open chat window
       toggleWidget(true);
+
+      // Restore message history
       if (data.messages && data.messages.length) {
         var box = d.getElementById('lc-messages');
         if (box) {
-          // Clear default greeting
           while (box.firstChild) box.removeChild(box.firstChild);
-          // Restore all messages
           for (var i = 0; i < data.messages.length; i++) {
             appendMsg(data.messages[i].text, data.messages[i].from);
           }
@@ -98,7 +108,6 @@
     socket.on('visitor:restore_failed', function () {
       localStorage.removeItem('lc_active');
       hasActiveSession = false;
-      // Join fresh
       var ua = navigator.userAgent;
       var device = 'Desktop';
       if (/iPhone|iPod/.test(ua)) device = 'iOS';
