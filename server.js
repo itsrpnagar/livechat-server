@@ -276,21 +276,29 @@ io.on("connection", (socket) => {
       socket.emit("visitor:restore_failed");
       return;
     }
-    // Update socket ID only — don't reopen chat
+    // Update socket ID
     session.visitorSocketId = socket.id;
     session.status = "away";
     socket.sessionId = sid;
 
     socket.emit("visitor:restore_ok", { sessionId: sid });
 
-    // Notify admin — show Reconnect button
+    // Re-emit visitor to admin panel so it shows up again
     if (adminSocketId) {
+      const vData = activeVisitorData.get(deviceId);
+      if (vData) {
+        vData.socketId = socket.id;
+        vData.alerted  = false; // reset alert so Reconnect button shows
+        activeVisitorData.set(deviceId, vData);
+        io.to(adminSocketId).emit("admin:visitor_update", vData);
+      }
+      // Also notify admin to show Reconnect button on session
       io.to(adminSocketId).emit("admin:visitor_refreshed", {
         sessionId: sid,
         deviceId,
       });
     }
-    console.log("Visitor refreshed page, session kept:", sid);
+    console.log("Visitor refreshed, session kept:", sid);
   });
 
   // ── Visitor: closed chat window ─────────────────────────────
