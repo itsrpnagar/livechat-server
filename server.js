@@ -210,6 +210,15 @@ io.on("connection", (socket) => {
       socket.emit("visitor:session", { sessionId: sid });
       return;
     }
+
+    // Close any old active sessions for same device
+    Object.values(sessions).forEach(s => {
+      if (s._deviceId === deviceId && s.status !== "closed" && s.id !== sid) {
+        s.status = "closed";
+        if (adminSocketId) io.to(adminSocketId).emit("admin:session_closed", { sessionId: s.id });
+      }
+    });
+
     const greeting = `Hi! I see you need help with "${service}". A live agent will be with you shortly.`;
     const msg = { id: crypto.randomUUID(), from: "admin", text: greeting, time: new Date().toISOString() };
     const session = {
@@ -241,8 +250,8 @@ io.on("connection", (socket) => {
     }
     session.visitorSocketId = socket.id;
     session.status = "away";
-    session._reconnectable = true;
     session._deviceId = deviceId;
+    // Note: _reconnectable NOT set here — only set when visitor closes chat
     socket.sessionId = sid;
     socket.emit("visitor:restore_ok", { sessionId: sid });
     if (adminSocketId) {
