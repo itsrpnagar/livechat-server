@@ -361,7 +361,12 @@
     localStorage.setItem('lc_active', '1');
     hasActiveSession = true;
     toggleWidget(true);
-    // Note: visitor:service_selected is emitted by ui-metrics.js — not here
+
+    // Show default greeting immediately
+    if (service) {
+      appendMsg('Hi! I see you need help with "' + service + '". A live agent will be with you shortly.', 'admin');
+    }
+
     if (!socket) {
       loadSocket(function () { initSocket(); });
     }
