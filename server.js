@@ -228,7 +228,7 @@ io.on("connection", (socket) => {
     sessions[sid] = session;
     socket.sessionId = sid;
     socket.emit("visitor:session", { sessionId: sid });
-    socket.emit("chat:message", msg);
+    // Don't emit chat:message — widget shows greeting directly
     stats.chatsStarted++;
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:new_session", session);
