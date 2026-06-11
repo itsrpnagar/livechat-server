@@ -78,6 +78,8 @@
   .btn-reconnect-feed { width: 100%; padding: 8px; background: #f59e0b; border: none; border-radius: 8px; color: #000; font-size: 12px; font-weight: 700; cursor: pointer; margin-top: 4px; }
   .btn-reconnect-feed:hover { background: #d97706; }
   .btn-reconnect-feed.sent { background: var(--green); color: #000; cursor: not-allowed; }
+  .btn-reset-alert { width: 100%; padding: 7px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--accent2); font-size: 11px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+  .btn-reset-alert:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
   .status-indicator { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .s-active { background: var(--green); } .s-away { background: var(--yellow); } .s-closed { background: var(--muted); }
   .empty-state { text-align: center; padding: 40px 16px; color: var(--muted); }
@@ -318,6 +320,11 @@ function connect() {
     if (visitors[deviceId]) { visitors[deviceId].alerted = true; renderVisitorFeed(); }
   });
 
+  socket.on('admin:alert_reset', ({ deviceId }) => {
+    if (visitors[deviceId]) { visitors[deviceId].alerted = false; renderVisitorFeed(); }
+    showNotif('🔁 Alert reset — Send Alert enabled');
+  });
+
   socket.on('admin:lc_dismissed', ({ deviceId }) => {
     const hasSession = Object.values(sessions).some(function(s) {
       return s.visitorSocketId === (visitors[deviceId] && visitors[deviceId].socketId) && s.status !== 'closed';
@@ -432,7 +439,8 @@ function renderVisitorFeed() {
     } else if (reconnectSession) {
       btnHtml = '<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed(\'' + reconnectSession.id + '\', this)">🔄 Reconnect Chat</button>';
     } else if (v.alerted) {
-      btnHtml = '<button class="btn-alert sent" disabled>Alert Sent ✔</button>';
+      btnHtml = '<button class="btn-alert sent" disabled>Alert Sent ✔</button>' +
+        '<button class="btn-reset-alert" onclick="resetAlert(\'' + v.deviceId + '\', this)">🔁 Reset & Re-Alert</button>';
     } else {
       btnHtml = '<button class="btn-alert enabled" onclick="sendAlert(\'' + v.socketId + '\',\'' + v.deviceId + '\',this)">🔔 Send Alert</button>';
     }
@@ -469,6 +477,13 @@ function reconnectVisitor(sessionId, e) {
     sessions[sessionId]._refreshed = false;
     renderSessions();
   }
+}
+
+function resetAlert(deviceId, btn) {
+  if (!socket) return;
+  socket.emit('admin:reset_alert', { deviceId });
+  btn.textContent = 'Resetting...';
+  btn.disabled = true;
 }
 
 function sendAlert(socketId, deviceId, btn) {
