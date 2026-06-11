@@ -111,6 +111,29 @@
       appendMsg(msg.text, 'admin');
     });
 
+    // ── Admin Reconnect → reopen chat window ──
+    socket.on('chat:reopen', function (data) {
+      sessionId = data.sessionId;
+      localStorage.setItem('lc_sid', data.sessionId);
+      localStorage.setItem('lc_active', '1');
+      hasActiveSession = true;
+      setStatus('online');
+
+      // Open widget
+      toggleWidget(true);
+
+      // Restore messages
+      if (data.messages && data.messages.length) {
+        var box = d.getElementById('lc-messages');
+        if (box) {
+          while (box.firstChild) box.removeChild(box.firstChild);
+          for (var i = 0; i < data.messages.length; i++) {
+            appendMsg(data.messages[i].text, data.messages[i].from);
+          }
+        }
+      }
+    });
+
     socket.on('chat:admin_typing', function () {
       showTyping(true);
       clearTimeout(typingTimer);
@@ -300,6 +323,8 @@
     }
     localStorage.setItem('lc_active', '1');
     hasActiveSession = true;
+
+    // Open widget first
     toggleWidget(true);
 
     // Restore message history
@@ -313,11 +338,17 @@
       }
     }
 
-    // Connect socket if not connected
+    // Connect socket — use _lcSocket from ui-metrics if available
     if (!socket) {
-      loadSocket(function () {
-        initSocket();
-      });
+      if (w._lcSocket && w._lcSocket.connected) {
+        socket = w._lcSocket;
+        connected = true;
+        setStatus('online');
+      } else {
+        loadSocket(function () { initSocket(); });
+      }
+    } else {
+      setStatus('online');
     }
   };
 
