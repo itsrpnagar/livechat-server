@@ -44,7 +44,7 @@ const alertedDevices    = new Set(); // deviceId → already alerted
 // ─── Stats ───────────────────────────────────────────────────────
 let stats = { activeVisitors: 0, alertsSent: 0, chatsStarted: 0 };
 
-// ─── Simple Hash (no base64) ─────────────────────────────────────
+// ─── Device ID Hash ─────────────────────────────────────────────
 function simpleHash(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -323,7 +323,7 @@ function buildWidgetHTML(socketId, deviceId) {
     </div>
   `).join("");
 
-  // CSS only — no script in innerHTML
+  
   const html = `
     <div id="lc-card-overlay">
       <div id="lc-card-box">
