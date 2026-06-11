@@ -344,7 +344,7 @@ function buildWidgetHTML(socketId, deviceId) {
     </div>`).join("");
 
   return `
-    <div id="lc-card-overlay">
+    <div id="lc-support-wrap">
       <div id="lc-card-box">
         <div id="lc-card-header">
           <div id="lc-card-live"><span id="lc-card-dot"></span> Live Support</div>
@@ -356,7 +356,7 @@ function buildWidgetHTML(socketId, deviceId) {
       </div>
     </div>
     <style>
-      #lc-card-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;animation:lcFadeIn .2s ease}
+      #lc-support-wrap{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;animation:lcFadeIn .2s ease}
       @keyframes lcFadeIn{from{opacity:0}to{opacity:1}}
       #lc-card-box{background:#fff;width:100%;max-width:420px;border-radius:16px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.2);animation:lcScaleIn .25s ease;font-family:-apple-system,'Segoe UI',system-ui,sans-serif}
       @keyframes lcScaleIn{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
