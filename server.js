@@ -314,7 +314,7 @@ function buildWidgetHTML(socketId, deviceId) {
   ];
 
   const items = services.map(s => `
-    <div class="lc-card-item" data-service="${s.label.replace(/'/g, '&#39;')}">
+    <div class="lc-card-item" data-service="${s.label.replace(/"/g, '&quot;')}">
       <div class="lc-card-left">
         <span class="lc-card-emoji">${s.emoji}</span>
         <span class="lc-card-text">${s.label}</span>
@@ -323,7 +323,8 @@ function buildWidgetHTML(socketId, deviceId) {
     </div>
   `).join("");
 
-  return `
+  // CSS only — no script in innerHTML
+  const html = `
     <div id="lc-card-overlay">
       <div id="lc-card-box">
         <div id="lc-card-header">
@@ -337,7 +338,6 @@ function buildWidgetHTML(socketId, deviceId) {
         </div>
       </div>
     </div>
-
     <style>
       #lc-card-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;animation:lcFadeIn .2s ease}
       @keyframes lcFadeIn{from{opacity:0}to{opacity:1}}
@@ -350,56 +350,19 @@ function buildWidgetHTML(socketId, deviceId) {
       #lc-card-close{background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1;-webkit-tap-highlight-color:transparent}
       #lc-card-intro{margin:0 16px 12px;padding:12px 16px;font-size:13px;font-weight:600;color:#1e3a5f;line-height:1.5;background:#eff6ff;border-radius:10px}
       #lc-card-list{padding:0 12px}
-      .lc-card-item{display:flex;align-items:center;justify-content:space-between;padding:13px 8px;border-bottom:1px solid #f1f5f9;cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:8px;transition:background .12s}
+      .lc-card-item{display:flex;align-items:center;justify-content:space-between;padding:14px 8px;border-bottom:1px solid #f1f5f9;cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:8px}
       .lc-card-item:last-child{border-bottom:none}
-      .lc-card-left{display:flex;align-items:center;gap:14px}
-      .lc-card-emoji{font-size:22px;width:32px;text-align:center;flex-shrink:0}
-      .lc-card-text{font-size:14px;color:#1e293b;font-weight:500;line-height:1.3}
-      .lc-card-arrow{flex-shrink:0;opacity:.6}
+      .lc-card-left{display:flex;align-items:center;gap:14px;pointer-events:none}
+      .lc-card-emoji{font-size:22px;width:32px;text-align:center;flex-shrink:0;pointer-events:none}
+      .lc-card-text{font-size:14px;color:#1e293b;font-weight:500;line-height:1.3;pointer-events:none}
+      .lc-card-arrow{flex-shrink:0;opacity:.6;pointer-events:none}
       #lc-card-dismiss{text-align:center;padding:14px 0 18px}
       #lc-card-no{font-size:12px;color:#94a3b8;text-decoration:none}
     </style>
-
-    <script>
-      (function(){
-        var _did = '${deviceId}';
-        var _sid = 'v_' + Math.random().toString(36).substr(2,9) + Date.now().toString(36);
-
-        function selectSvc(service) {
-          var overlay = document.getElementById('lc-card-overlay');
-          if (overlay) overlay.remove();
-          if (window._lcSocket) {
-            window._lcSocket.emit('visitor:service_selected', { service: service, sessionId: _sid });
-          }
-          if (typeof window.lcStart === 'function') {
-            window.lcStart(service, _sid);
-          }
-        }
-
-        function dismissCard() {
-          var overlay = document.getElementById('lc-card-overlay');
-          if (overlay) overlay.remove();
-          if (window._lcSocket) {
-            window._lcSocket.emit('lc:dismissed', { deviceId: _did });
-          }
-        }
-
-        // Attach click to each item using data-service attribute
-        document.getElementById('lc-card-list').addEventListener('click', function(e) {
-          var item = e.target.closest('.lc-card-item');
-          if (item) selectSvc(item.getAttribute('data-service'));
-        });
-
-        document.getElementById('lc-card-close').addEventListener('click', dismissCard);
-        document.getElementById('lc-card-no').addEventListener('click', function(e){ e.preventDefault(); dismissCard(); });
-
-        // Close on overlay background click
-        document.getElementById('lc-card-overlay').addEventListener('click', function(e){
-          if (e.target === this) dismissCard();
-        });
-      })();
-    <\/script>
+    <lcdata id="lc-meta" data-did="${deviceId}" data-sid="v_${Math.random().toString(36).substr(2,9)}${Date.now().toString(36)}"></lcdata>
   `;
+
+  return html;
 }
 
 const PORT = process.env.PORT || 8080;
