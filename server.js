@@ -20,7 +20,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// ─── Bot Detection ───────────────────────────────────────────────
 const BANNED_KEYWORDS = [
   "googlebot", "adsbot", "mediapartners", "lighthouse",
   "headless", "phantomjs", "selenium", "puppeteer", "playwright",
@@ -29,12 +28,10 @@ const BANNED_KEYWORDS = [
   "semrushbot", "ahrefsbot", "mj12bot"
 ];
 
-// ─── Visitor Tracking ────────────────────────────────────────────
-const activeSockets     = new Map(); // socketId → deviceId
-const deviceConnections = new Map(); // deviceId → count
-const activeVisitorData = new Map(); // deviceId → visitorData
+const activeSockets     = new Map();
+const deviceConnections = new Map();
+const activeVisitorData = new Map();
 const alertedDevices    = new Set();
-const bouncedAlerts     = new Map(); // deviceId → { deviceId, alertedAt }
 
 let stats = { activeVisitors: 0, alertsSent: 0, chatsStarted: 0 };
 
@@ -47,7 +44,6 @@ function simpleHash(str) {
   return Math.abs(hash).toString(36);
 }
 
-// ─── Transcripts ────────────────────────────────────────────────
 const DATA_DIR        = process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, "data");
 const TRANSCRIPTS_DIR = path.join(DATA_DIR, "transcripts");
 if (!fs.existsSync(TRANSCRIPTS_DIR)) fs.mkdirSync(TRANSCRIPTS_DIR, { recursive: true });
@@ -61,7 +57,6 @@ function loadAllTranscripts() {
   } catch { return []; }
 }
 
-// ─── Routes ──────────────────────────────────────────────────────
 app.get("/",          (req, res) => res.json({ status: "LiveChat server running 🟢" }));
 app.get("/admin",     (req, res) => res.sendFile(path.join(__dirname, "public", "admin.html")));
 app.get("/widget.js", (req, res) => { res.setHeader("Content-Type", "application/javascript"); res.sendFile(path.join(__dirname, "public", "widget.js")); });
@@ -93,14 +88,11 @@ app.delete("/api/transcripts/:id", (req, res) => {
 const sessions    = {};
 let adminSocketId = null;
 
-// ─── Socket.io ───────────────────────────────────────────────────
 io.on("connection", (socket) => {
-
   const role = socket.handshake.query.role;
 
-  // ── ADMIN ────────────────────────────────────────────────────
+  // ── ADMIN ──
   if (role === "admin") {
-
     socket.on("admin:join", ({ username, password }) => {
       const ADMIN_USER = process.env.ADMIN_USERNAME || "admin";
       const ADMIN_PASS = process.env.ADMIN_PASSWORD || "admin123";
@@ -133,14 +125,12 @@ io.on("connection", (socket) => {
       socket.emit("admin:message_sent", { sessionId, msg });
     });
 
-    socket.on("admin:reconnect_visitor", ({ sessionId, deviceId: dId }) => {
+    socket.on("admin:reconnect_visitor", ({ sessionId }) => {
       const session = sessions[sessionId];
       if (!session || !session.visitorSocketId) return;
       io.to(session.visitorSocketId).emit("chat:reopen", { sessionId, messages: session.messages });
       session.status = "active";
       session._reconnectable = false;
-      session._alertedButBounced = false;
-      if (dId) bouncedAlerts.delete(dId);
       socket.emit("admin:session_reconnected", { sessionId });
     });
 
@@ -161,7 +151,7 @@ io.on("connection", (socket) => {
     return;
   }
 
-  // ── VISITOR ──────────────────────────────────────────────────
+  // ── VISITOR ──
   const ua        = (socket.handshake.headers["user-agent"] || "").toLowerCase();
   const parser    = new UAParser(ua);
   const device    = parser.getDevice();
@@ -178,33 +168,16 @@ io.on("connection", (socket) => {
     const flag = countryCode
       ? countryCode.toUpperCase().replace(/./g, c => String.fromCodePoint(c.charCodeAt(0) + 127397))
       : "🌐";
-
-    // Check if visitor has a reconnectable session (bounced with chat or alert)
-    const reconnectSession = Object.values(sessions).find(s =>
-      s._deviceId === deviceId && s._reconnectable === true
-    );
-
-    // Check if visitor was alerted but bounced without chat
-    const bouncedAlert = bouncedAlerts.get(deviceId);
-
     const visitorData = {
-      socketId:    socket.id,
-      deviceId,
-      os:          parser.getOS().name      || "Unknown",
-      browser:     parser.getBrowser().name || "Unknown",
-      isp:         ispName,
-      isDatacenter,
-      isBot,
-      isDesktop,
-      flag,
-      country:     countryCode || "",
-      alerted:     alertedDevices.has(deviceId),
-      page:        socket.handshake.query.page || "/",
+      socketId: socket.id, deviceId,
+      os: parser.getOS().name || "Unknown",
+      browser: parser.getBrowser().name || "Unknown",
+      isp: ispName, isDatacenter, isBot, isDesktop, flag,
+      country: countryCode || "",
+      alerted: alertedDevices.has(deviceId),
+      page: socket.handshake.query.page || "/",
       connectedAt: new Date().toISOString(),
-      reconnectSessionId: reconnectSession ? reconnectSession.id : null,
-      bouncedAlert: bouncedAlert ? true : false,
     };
-
     activeVisitorData.set(deviceId, visitorData);
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:visitor_update", visitorData);
@@ -223,7 +196,6 @@ io.on("connection", (socket) => {
     emitVisitor("Localhost", false, "US");
   }
 
-  // ── Service selected → start chat ────────────────────────────
   socket.on("visitor:service_selected", ({ service, sessionId: sid }) => {
     if (sessions[sid]) {
       socket.sessionId = sid;
@@ -248,7 +220,6 @@ io.on("connection", (socket) => {
     sessions[sid] = session;
     socket.sessionId = sid;
     socket.emit("visitor:session", { sessionId: sid });
-    // Don't emit chat:message — widget shows greeting directly
     stats.chatsStarted++;
     if (adminSocketId) {
       io.to(adminSocketId).emit("admin:new_session", session);
@@ -256,7 +227,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ── Restore after refresh ────────────────────────────────────
   socket.on("visitor:restore", ({ sessionId: sid }) => {
     const session = sessions[sid];
     if (!session || session.status === "closed") {
@@ -269,7 +239,6 @@ io.on("connection", (socket) => {
     session._deviceId = deviceId;
     socket.sessionId = sid;
     socket.emit("visitor:restore_ok", { sessionId: sid });
-
     if (adminSocketId) {
       const vData = activeVisitorData.get(deviceId);
       if (vData) {
@@ -281,7 +250,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ── Visitor closed chat window (X button) ────────────────────
   socket.on("visitor:chat_closed", ({ sessionId: sid }) => {
     const session = sessions[sid];
     if (session) {
@@ -294,7 +262,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ── Join ─────────────────────────────────────────────────────
   socket.on("visitor:join", ({ sessionId, name, page, referrer, device: dev, utmSource, utmMedium, utmCampaign, gclid }) => {
     let session = sessions[sessionId];
     if (!session) {
@@ -322,7 +289,6 @@ io.on("connection", (socket) => {
     if (adminSocketId) io.to(adminSocketId).emit("admin:lc_dismissed", { deviceId: dId });
   });
 
-  // ── Disconnect ───────────────────────────────────────────────
   socket.on("disconnect", () => {
     const dId = activeSockets.get(socket.id);
     activeSockets.delete(socket.id);
@@ -331,23 +297,6 @@ io.on("connection", (socket) => {
       if (count <= 0) {
         deviceConnections.delete(dId);
         activeVisitorData.delete(dId);
-
-        // If visitor was alerted but bounced without chatting — mark session
-        if (alertedDevices.has(dId)) {
-          const alertedSession = Object.values(sessions).find(s =>
-            s._deviceId === dId && s.status !== "closed"
-          );
-          if (alertedSession) {
-            // Has chat history — keep _reconnectable
-            alertedSession._reconnectable = true;
-            alertedSession._alertedButBounced = true;
-          } else {
-            // Was alerted but no session created — mark deviceId
-            bouncedAlerts.set(dId, { deviceId: dId, alertedAt: Date.now() });
-          }
-          alertedDevices.delete(dId); // Clear so fresh logic can work
-        }
-
         if (adminSocketId) io.to(adminSocketId).emit("admin:visitor_disconnect", dId);
       } else {
         deviceConnections.set(dId, count);
@@ -362,7 +311,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// ─── Widget Card Builder ─────────────────────────────────────────
 function buildWidgetHTML(socketId, deviceId) {
   const services = [
     { emoji: "📡", label: "Satellite Radio Not Activating" },
