@@ -222,6 +222,14 @@
   }
   w.addEventListener('resize', setWidgetSize);
 
+  // ─── Page Visibility API — mobile reconnect ─────────────────
+  // Jab visitor phone unlock kare ya app foreground mein aaye
+  d.addEventListener('visibilitychange', function () {
+    if (d.visibilityState === 'visible' && socket && !socket.connected) {
+      socket.connect();
+    }
+  });
+
   // ─── Scroll ──────────────────────────────────────────────────
   function scrollBottom() {
     var box = d.getElementById('lc-messages');
