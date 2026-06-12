@@ -89,8 +89,6 @@
       if (snd) snd.disabled = true;
       setStatus('offline');
     });
-
-    socket.on('disconnect', function () { connected = false; setStatus('away'); });
   }
 
   // ─── CSS ─────────────────────────────────────────────────────
