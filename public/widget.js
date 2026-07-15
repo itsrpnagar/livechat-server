@@ -168,6 +168,10 @@
   btnBadge.setAttribute('aria-hidden', 'true');
   btn.appendChild(btnIcon);
   btn.appendChild(btnBadge);
+  // Hide widget button if landing page has its own float button
+  if (d.getElementById('lc-float-btn')) {
+    btn.style.display = 'none';
+  }
   d.body.appendChild(btn);
 
   // ─── Build Widget ────────────────────────────────────────────
@@ -320,7 +324,11 @@
       d.body.style.overflow = '';
       d.body.style.position = '';
       d.body.style.width    = '';
-      btn.style.display = 'flex';
+      // Hide widget's own button — landing page has its own float button
+      btn.style.display = 'none';
+      // Show landing page float button if exists
+      var floatBtn = d.getElementById('lc-float-btn');
+      if (floatBtn) floatBtn.style.display = 'flex';
     }
   }
 
