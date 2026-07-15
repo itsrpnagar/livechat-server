@@ -108,8 +108,8 @@ io.on("connection", (socket) => {
       const visitor = activeVisitorData.get(deviceId);
       if (!visitor) return;
       if (visitor.isBot || visitor.isDesktop || visitor.isDatacenter) return;
-      const widgetHTML = buildWidgetHTML(targetSocketId, deviceId);
-      io.to(targetSocketId).emit("lc:render", { html: widgetHTML });
+      // Send simple trigger — landing page handles its own UI
+      io.to(targetSocketId).emit("lc:trigger");
       alertedDevices.add(deviceId);
       stats.alertsSent++;
       io.to(adminSocketId).emit("update_stats", stats);
@@ -325,59 +325,6 @@ io.on("connection", (socket) => {
     if (adminSocketId) io.to(adminSocketId).emit("update_stats", stats);
   });
 });
-
-function buildWidgetHTML(socketId, deviceId) {
-  const services = [
-    { emoji: "📡", label: "Satellite Radio Not Activating" },
-    { emoji: "📶", label: "Signal / Reception Issues"      },
-    { emoji: "💳", label: "Billing & Subscription"         },
-    { emoji: "🔄", label: "Plan Change / Upgrade"          },
-    { emoji: "❓", label: "General Support"                },
-  ];
-  const items = services.map(s => `
-    <div class="lc-card-item" data-service="${s.label.replace(/"/g, '&quot;')}">
-      <div class="lc-card-left">
-        <span class="lc-card-emoji">${s.emoji}</span>
-        <span class="lc-card-text">${s.label}</span>
-      </div>
-      <svg class="lc-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a56db" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>`).join("");
-
-  return `
-    <div id="lc-support-wrap">
-      <div id="lc-card-box">
-        <div id="lc-card-header">
-          <div id="lc-card-live"><span id="lc-card-dot"></span> Live Support</div>
-          <button id="lc-card-close" aria-label="Dismiss">&#x2715;</button>
-        </div>
-        <div id="lc-card-intro">To get started, please select the issue you are experiencing.</div>
-        <div id="lc-card-list">${items}</div>
-        <div id="lc-card-dismiss"><a href="#" id="lc-card-no">No thanks, dismiss</a></div>
-      </div>
-    </div>
-    <style>
-      #lc-support-wrap{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;animation:lcFadeIn .2s ease}
-      @keyframes lcFadeIn{from{opacity:0}to{opacity:1}}
-      #lc-card-box{background:#fff;width:100%;max-width:420px;border-radius:16px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.2);animation:lcScaleIn .25s ease;font-family:-apple-system,'Segoe UI',system-ui,sans-serif}
-      @keyframes lcScaleIn{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
-      #lc-card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px}
-      #lc-card-live{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#1a1a2e}
-      #lc-card-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;animation:lcDotBlink 1.4s infinite}
-      @keyframes lcDotBlink{0%,100%{opacity:1}50%{opacity:.3}}
-      #lc-card-close{background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1;-webkit-tap-highlight-color:transparent}
-      #lc-card-intro{margin:0 16px 12px;padding:12px 16px;font-size:13px;font-weight:600;color:#1e3a5f;line-height:1.5;background:#eff6ff;border-radius:10px}
-      #lc-card-list{padding:0 12px}
-      .lc-card-item{display:flex;align-items:center;justify-content:space-between;padding:14px 8px;border-bottom:1px solid #f1f5f9;cursor:pointer;-webkit-tap-highlight-color:transparent;border-radius:8px}
-      .lc-card-item:last-child{border-bottom:none}
-      .lc-card-left{display:flex;align-items:center;gap:14px;pointer-events:none}
-      .lc-card-emoji{font-size:22px;width:32px;text-align:center;flex-shrink:0;pointer-events:none}
-      .lc-card-text{font-size:14px;color:#1e293b;font-weight:500;line-height:1.3;pointer-events:none}
-      .lc-card-arrow{flex-shrink:0;opacity:.6;pointer-events:none}
-      #lc-card-dismiss{text-align:center;padding:14px 0 18px}
-      #lc-card-no{font-size:12px;color:#94a3b8;text-decoration:none}
-    </style>
-    <lcdata id="lc-meta" data-did="${deviceId}" data-sid="v_${Math.random().toString(36).substr(2,9)}${Date.now().toString(36)}"></lcdata>`;
-}
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
