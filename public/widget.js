@@ -5,7 +5,7 @@
   'use strict';
 
   var cfg       = w.LiveChatConfig || {};
-  var SERVER    = cfg.server || 'https://api.satradiozone.online';
+  var SERVER    = cfg.server || 'https://lchat.smartcamcare.live';
   var BOT_NAME  = cfg.name   || 'Support';
   var THEME     = cfg.color  || '#6c63ff';
 
