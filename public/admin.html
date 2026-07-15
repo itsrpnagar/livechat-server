@@ -196,7 +196,6 @@
       <!-- Stats bar -->
       <div class="stats-bar">
         <div class="stat-pill"><div class="sp-num" id="stat-visitors">0</div><div class="sp-lbl">Visitors</div></div>
-        <div class="stat-pill"><div class="sp-num" id="stat-alerts">0</div><div class="sp-lbl">Alerts</div></div>
         <div class="stat-pill"><div class="sp-num" id="stat-chats">0</div><div class="sp-lbl">Chats</div></div>
       </div>
 
@@ -291,7 +290,6 @@ function connect() {
   // ── Stats ──
   socket.on('update_stats', (data) => {
     document.getElementById('stat-visitors').textContent = data.activeVisitors || 0;
-    document.getElementById('stat-alerts').textContent   = data.alertsSent    || 0;
     document.getElementById('stat-chats').textContent    = data.chatsStarted  || 0;
   });
 
@@ -314,22 +312,6 @@ function connect() {
   socket.on('admin:visitor_disconnect', (deviceId) => {
     delete visitors[deviceId];
     renderVisitorFeed();
-  });
-
-  socket.on('admin:alert_sent', ({ deviceId }) => {
-    if (visitors[deviceId]) { visitors[deviceId].alerted = true; renderVisitorFeed(); }
-  });
-
-  socket.on('admin:alert_reset', ({ deviceId }) => {
-    if (visitors[deviceId]) { visitors[deviceId].alerted = false; renderVisitorFeed(); }
-    showNotif('🔁 Alert reset — Send Alert enabled');
-  });
-
-  socket.on('admin:lc_dismissed', ({ deviceId }) => {
-    const hasSession = Object.values(sessions).some(function(s) {
-      return s.visitorSocketId === (visitors[deviceId] && visitors[deviceId].socketId) && s.status !== 'closed';
-    });
-    if (!hasSession && visitors[deviceId]) { visitors[deviceId].alerted = false; renderVisitorFeed(); }
   });
 
   // ── Chat Sessions ──
@@ -440,11 +422,6 @@ function renderVisitorFeed() {
       btnHtml = '<button class="btn-alert blocked" disabled>Blocked</button>';
     } else if (reconnectSession) {
       btnHtml = '<button class="btn-reconnect-feed" onclick="reconnectVisitorFromFeed(\'' + reconnectSession.id + '\', this)">🔄 Reconnect Chat</button>';
-    } else if (v.alerted) {
-      btnHtml = '<button class="btn-alert sent" disabled>Alert Sent ✔</button>' +
-        '<button class="btn-reset-alert" onclick="resetAlert(\'' + v.deviceId + '\', this)">🔁 Reset & Re-Alert</button>';
-    } else {
-      btnHtml = '<button class="btn-alert enabled" onclick="sendAlert(\'' + v.socketId + '\',\'' + v.deviceId + '\',this)">🔔 Send Alert</button>';
     }
 
     return '<div class="visitor-card">' +
@@ -479,21 +456,6 @@ function reconnectVisitor(sessionId, e) {
     sessions[sessionId]._refreshed = false;
     renderSessions();
   }
-}
-
-function resetAlert(deviceId, btn) {
-  if (!socket) return;
-  socket.emit('admin:reset_alert', { deviceId });
-  btn.textContent = 'Resetting...';
-  btn.disabled = true;
-}
-
-function sendAlert(socketId, deviceId, btn) {
-  if (!socket || btn.disabled) return;
-  socket.emit('admin:send_alert', { targetSocketId: socketId, deviceId });
-  btn.className   = 'btn-alert sent';
-  btn.textContent = 'Alert Sent ✔';
-  btn.disabled    = true;
 }
 
 function renderSessions() {
