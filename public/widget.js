@@ -110,9 +110,8 @@
     'width:100%!important;border-radius:0!important;box-shadow:none!important}',
     '#lc-header{flex-shrink:0;padding:14px 16px;background:' + THEME + ';',
     'display:flex;align-items:center;gap:10px}',
-    '#lc-avatar{width:36px;height:36px;border-radius:50%;',
-    'background:rgba(255,255,255,.25);display:flex;align-items:center;',
-    'justify-content:center;font-size:18px;flex-shrink:0}',
+    '#lc-avatar{width:38px;height:38px;border-radius:50%;',
+    'object-fit:cover;border:2px solid rgba(255,255,255,.4);flex-shrink:0}',
     '.lc-info{flex:1;min-width:0}',
     '.lc-title{color:#fff;font-weight:700;font-size:15px}',
     '.lc-sub{color:rgba(255,255,255,.85);font-size:12px;display:flex;',
@@ -181,14 +180,23 @@
   widget.setAttribute('aria-label', 'Live chat support');
 
   var header   = d.createElement('div'); header.id = 'lc-header';
-  var avatar   = d.createElement('div'); avatar.id = 'lc-avatar'; avatar.setAttribute('aria-hidden','true'); avatar.textContent = '\uD83D\uDC4B';
+
+  // Photo
+  var avatar   = d.createElement('img');
+  avatar.id    = 'lc-avatar';
+  avatar.src   = 'img/44.jpg';
+  avatar.alt   = 'Sarah R';
+  avatar.setAttribute('aria-hidden','true');
+
+  // Info
   var info     = d.createElement('div'); info.className = 'lc-info';
-  var title    = d.createElement('div'); title.className = 'lc-title'; title.textContent = BOT_NAME;
+  var title    = d.createElement('div'); title.className = 'lc-title'; title.textContent = 'Sarah R';
   var sub      = d.createElement('div'); sub.className = 'lc-sub';
   var dot      = d.createElement('span'); dot.className = 'lc-dot'; dot.id = 'lc-dot'; dot.setAttribute('aria-hidden','true');
   var statusTxt = d.createElement('span'); statusTxt.id = 'lc-status-text'; statusTxt.textContent = 'Online';
   sub.appendChild(dot); sub.appendChild(statusTxt);
   info.appendChild(title); info.appendChild(sub);
+
   var closeBtn = d.createElement('button'); closeBtn.id = 'lc-close-btn'; closeBtn.setAttribute('aria-label','Close chat'); closeBtn.textContent = '\u2715';
   header.appendChild(avatar); header.appendChild(info); header.appendChild(closeBtn);
 
