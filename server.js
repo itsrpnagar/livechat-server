@@ -164,7 +164,8 @@ io.on("connection", (socket) => {
   const isBot     = BANNED_KEYWORDS.some(k => ua.includes(k));
   const isDesktop = !device.type || !["mobile","tablet","wearable"].includes(device.type);
   const ip        = (socket.handshake.headers["x-forwarded-for"] || "").split(",")[0].trim() || socket.handshake.address || "";
-  const deviceId  = simpleHash(ip + (parser.getOS().name || "") + (parser.getBrowser().name || ""));
+  const cid       = socket.handshake.query.cid || "";
+  const deviceId  = simpleHash(ip + (parser.getOS().name || "") + (parser.getBrowser().name || "") + cid);
 
   activeSockets.set(socket.id, deviceId);
   deviceConnections.set(deviceId, (deviceConnections.get(deviceId) || 0) + 1);
