@@ -286,9 +286,10 @@
     // Only add greeting once — not on every open/close
     var box = d.getElementById('lc-messages');
     if (service && box && box.children.length === 0) {
-      var greeting = service === 'General Support'
+
+      var greeting = service === 'General Consultation'
         ? 'Hello! Thank you for reaching out. Sarah R. is online and ready to help you. Please describe your issue below.'
-        : 'Hi! I see you need help with "' + service + '". i am with you?';
+        : 'Hi! I see you need help with "' + service + '". You\'re connected with Sarah R. \u2014 I\'m here to help resolve this quickly. What\'s your first name?';
       appendMsg(greeting, 'admin');
     }
 
