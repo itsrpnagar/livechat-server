@@ -202,7 +202,7 @@ io.on("connection", (socket) => {
     });
 
     const greeting = service === 'General Consultation'
-      ? `Hello! Thank you for reaching out. Sarah R. is online and ready to help you. Please describe your issue below.`
+      ? `Hello! Thank you for reaching out. You\'re connected with Sarah R. Please describe your issue below.`
       : `Hi! I see you need help with "${service}". You're connected with Sarah R. — I'm here to help resolve this quickly. What's your first name?`;
     const msg = { id: crypto.randomUUID(), from: "admin", text: greeting, time: new Date().toISOString() };
     const session = {
