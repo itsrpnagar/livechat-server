@@ -287,7 +287,7 @@
     var box = d.getElementById('lc-messages');
     if (service && box && box.children.length === 0) {
       var greeting = service === 'General Consultation'
-        ? 'Hello! Welcome to Live Support. A support agent will be with you shortly. Please describe your issue below.'
+        ? 'Hello! Thank you for reaching out. A live expert is online and ready to help you. Please describe your issue so we can assist you right away.'
         : 'Hi! I see you need help with "' + service + '". A live agent will be with you shortly.';
       appendMsg(greeting, 'admin');
     }
