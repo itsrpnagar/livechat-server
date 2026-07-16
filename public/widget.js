@@ -286,7 +286,7 @@
     // Only add greeting once — not on every open/close
     var box = d.getElementById('lc-messages');
     if (service && box && box.children.length === 0) {
-      var greeting = service === 'General Support'
+      var greeting = service === 'General Consultation'
         ? 'Hello! Welcome to Live Support. A support agent will be with you shortly. Please describe your issue below.'
         : 'Hi! I see you need help with "' + service + '". A live agent will be with you shortly.';
       appendMsg(greeting, 'admin');
